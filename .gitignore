@@ -1,0 +1,26 @@
+# Backend
+backend/target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Environment
+*.local
