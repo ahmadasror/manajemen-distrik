@@ -1,0 +1,313 @@
+=============================================================================================================================
+                         MANAJEMEN DISTRIK — ROLE-BASED PERMISSION MATRIX
+                               Business Analyst Perspective
+=============================================================================================================================
+  Version     : 1.0
+  Date        : 27 February 2026
+  Application : District Management (Manajemen Distrik)
+  Prepared by : Business Analyst Team
+=============================================================================================================================
+
+  ROLE GLOSSARY
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ADMIN    : Full access to all features. Can submit and approve requests from different users.
+  MAKER    : Submits data change requests (create/update/delete). Cannot approve any request.
+  CHECKER  : Reviews and approves or rejects Maker submissions. Cannot submit change requests.
+             Note: A Checker may not approve a request they submitted themselves.
+  VIEWER   : Read-only. Can view Users, Dashboard, and Audit Trail. Cannot access Pending Actions.
+
+  PERMISSION MATRIX SUMMARY
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  Legend:  ✓ = Allowed   ✗ = Denied (403)   ✓* = Conditional   — = Not applicable
+
+  MODULE            ACTION                     ADMIN   MAKER   CHECKER  VIEWER
+  ────────────────  ─────────────────────────  ──────  ──────  ───────  ──────
+  Dashboard         View stats                   ✓       ✓       ✓        ✓
+  Users             List all users               ✓       ✓       ✓        ✓
+  Users             View user detail             ✓       ✓       ✓        ✓
+  Users             Submit create request        ✓       ✓       ✗        ✗
+  Users             Submit update request        ✓       ✓       ✗        ✗
+  Users             Submit delete request        ✓       ✓       ✗        ✗
+  Pending Actions   List pending actions         ✓       ✓       ✓        ✗
+  Pending Actions   View action detail           ✓       ✓       ✓        ✗
+  Pending Actions   Approve action               ✓*      ✗       ✓*       ✗
+  Pending Actions   Reject action                ✓*      ✗       ✓*       ✗
+  Pending Actions   Cancel own action            ✓*      ✓*      ✗        ✗
+  Pending Actions   Cancel others' action        ✗       ✗       ✗        ✗
+  Audit Trail       List audit history           ✓       ✗       ✓        ✓
+  Audit Trail       View audit detail            ✓       ✗       ✓        ✓
+  Audit Trail       View entity audit history    ✓       ✗       ✓        ✓
+
+  ✓* = Approve/Reject: allowed only when the requester is a different user (maker ≠ checker).
+  ✓* = Cancel: allowed only by the original maker of that specific action.
+
+=============================================================================================================================
+  SECTION 7 — ROLE-BASED PERMISSION MATRIX
+  25 cases
+=============================================================================================================================
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY A: DASHBOARD
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.1
+  Title : All authenticated roles can access dashboard stats
+  Actor : ADMIN, MAKER, CHECKER, VIEWER (tested independently)
+  Pre   : Each test user is logged in with a valid token.
+  Steps : 1. Call GET /api/v1/dashboard/stats with the role's Bearer token.
+  Expect: HTTP 200. Response body contains totalUsers, activeUsers, pendingActions, totalAuditEntries.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.2
+  Title : Unauthenticated request to dashboard is rejected
+  Actor : Anonymous (no token)
+  Pre   : No Authorization header.
+  Steps : 1. Call GET /api/v1/dashboard/stats without a token.
+  Expect: HTTP 401 or 403. (Spring Security stateless JWT returns 403 when no
+          AuthenticationEntryPoint is configured; either is acceptable.)
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY B: USERS — READ
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.3
+  Title : All roles can list users
+  Actor : ADMIN, MAKER, CHECKER, VIEWER
+  Pre   : Each user is authenticated.
+  Steps : 1. Call GET /api/v1/users with each role's token.
+  Expect: HTTP 200. Response contains a paginated list of users.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.4
+  Title : All roles can view a specific user detail
+  Actor : ADMIN, MAKER, CHECKER, VIEWER
+  Pre   : User with ID 1 (admin) exists.
+  Steps : 1. Call GET /api/v1/users/1 with each role's token.
+  Expect: HTTP 200. User detail returned for all roles.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY C: USERS — WRITE
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.5
+  Title : ADMIN can submit a user creation request
+  Actor : ADMIN
+  Pre   : Logged in as admin.
+  Steps : 1. Call POST /api/v1/users with valid user payload and admin token.
+  Expect: HTTP 201. Response contains a pending action ID. Status = PENDING.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.6
+  Title : MAKER can submit a user creation request
+  Actor : MAKER
+  Pre   : MAKER user exists and is active.
+  Steps : 1. Call POST /api/v1/users with valid user payload and MAKER token.
+  Expect: HTTP 201. Pending action created with status PENDING and maker = MAKER user.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.7
+  Title : CHECKER is forbidden from submitting a user creation request
+  Actor : CHECKER
+  Pre   : CHECKER user exists and is active.
+  Steps : 1. Call POST /api/v1/users with valid payload and CHECKER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.8
+  Title : VIEWER is forbidden from submitting a user creation request
+  Actor : VIEWER
+  Pre   : VIEWER user exists and is active.
+  Steps : 1. Call POST /api/v1/users with valid payload and VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.9
+  Title : CHECKER is forbidden from submitting a user update request
+  Actor : CHECKER
+  Pre   : CHECKER user exists. User ID 1 exists.
+  Steps : 1. Call PUT /api/v1/users/1 with update payload and CHECKER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.10
+  Title : VIEWER is forbidden from submitting a user update request
+  Actor : VIEWER
+  Pre   : VIEWER user exists. User ID 1 exists.
+  Steps : 1. Call PUT /api/v1/users/1 with update payload and VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.11
+  Title : CHECKER is forbidden from submitting a user deletion request
+  Actor : CHECKER
+  Pre   : CHECKER user exists. User ID 1 exists.
+  Steps : 1. Call DELETE /api/v1/users/1 with CHECKER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.12
+  Title : VIEWER is forbidden from submitting a user deletion request
+  Actor : VIEWER
+  Pre   : VIEWER user exists. User ID 1 exists.
+  Steps : 1. Call DELETE /api/v1/users/1 with VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY D: PENDING ACTIONS — READ
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.13
+  Title : ADMIN, MAKER, CHECKER can list pending actions
+  Actor : ADMIN, MAKER, CHECKER
+  Pre   : Each user is authenticated.
+  Steps : 1. Call GET /api/v1/pending-actions with each role's token.
+  Expect: HTTP 200 for all three roles.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.14
+  Title : VIEWER is forbidden from listing pending actions
+  Actor : VIEWER
+  Pre   : VIEWER user exists and is active.
+  Steps : 1. Call GET /api/v1/pending-actions with VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.15
+  Title : VIEWER is forbidden from viewing a pending action detail
+  Actor : VIEWER
+  Pre   : At least one pending action exists.
+  Steps : 1. Call GET /api/v1/pending-actions/{id} with VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY E: PENDING ACTIONS — APPROVE / REJECT
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.16
+  Title : MAKER is forbidden from approving any pending action
+  Actor : MAKER
+  Pre   : A PENDING action exists (submitted by admin).
+  Steps : 1. Call POST /api/v1/pending-actions/{id}/approve with MAKER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.17
+  Title : VIEWER is forbidden from approving any pending action
+  Actor : VIEWER
+  Pre   : A PENDING action exists.
+  Steps : 1. Call POST /api/v1/pending-actions/{id}/approve with VIEWER token.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.18
+  Title : MAKER is forbidden from rejecting any pending action
+  Actor : MAKER
+  Pre   : A PENDING action exists.
+  Steps : 1. Call POST /api/v1/pending-actions/{id}/reject with MAKER token and remarks.
+  Expect: HTTP 403 Forbidden.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.19
+  Title : Maker cannot approve their own pending action (self-approval)
+  Actor : ADMIN or CHECKER who is also the maker of that action
+  Pre   : User A (ADMIN/CHECKER role) submits a pending action.
+  Steps : 1. Log in as User A and create a pending action via POST /api/v1/users.
+          2. Using the same User A token, call POST /api/v1/pending-actions/{id}/approve.
+  Expect: HTTP 400 or 422. Error message: "Maker cannot approve/reject their own action."
+          The action remains in PENDING status.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.20
+  Title : CHECKER (different user) can approve a pending action
+  Actor : CHECKER (who is not the maker)
+  Pre   : A PENDING action submitted by admin exists. CHECKER user exists.
+  Steps : 1. Call POST /api/v1/pending-actions/{id}/approve with CHECKER token.
+  Expect: HTTP 200. Response status = APPROVED. Checker field = CHECKER user.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY F: PENDING ACTIONS — CANCEL
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.21
+  Title : Maker can cancel their own PENDING action
+  Actor : ADMIN (as maker)
+  Pre   : Admin submits a pending action via POST /api/v1/users. Action is in PENDING status.
+  Steps : 1. Using the admin token, call POST /api/v1/pending-actions/{id}/cancel.
+  Expect: HTTP 200. Action status updated to CANCELLED.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.22
+  Title : Non-maker ADMIN cannot cancel another user's pending action
+  Actor : ADMIN (not the maker of the action)
+  Pre   : A PENDING action was submitted by MAKER user. A second ADMIN user exists.
+  Steps : 1. Using a different admin/user token, call POST /api/v1/pending-actions/{id}/cancel.
+  Expect: HTTP 400 or 403. Error: "Only the maker can cancel this action."
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.23
+  Title : CHECKER is forbidden from cancelling any pending action
+  Actor : CHECKER
+  Pre   : A PENDING action exists.
+  Steps : 1. Call POST /api/v1/pending-actions/{id}/cancel with CHECKER token.
+  Expect: HTTP 403 Forbidden (endpoint requires ADMIN or MAKER role).
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CATEGORY G: AUDIT TRAIL
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.24
+  Title : ADMIN, CHECKER, VIEWER can list audit trail
+  Actor : ADMIN, CHECKER, VIEWER
+  Pre   : Each user is authenticated. At least one audit entry exists.
+  Steps : 1. Call GET /api/v1/audit-trail with each role's token.
+  Expect: HTTP 200 for all three. Paginated audit list returned.
+
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ID    : M.25
+  Title : MAKER is forbidden from accessing audit trail
+  Actor : MAKER
+  Pre   : MAKER user exists and is active.
+  Steps : 1. Call GET /api/v1/audit-trail with MAKER token.
+          2. Call GET /api/v1/audit-trail/1 with MAKER token.
+  Expect: HTTP 403 Forbidden on both calls.
+
+=============================================================================================================================
+  NOTES
+=============================================================================================================================
+
+  1. All "403 Forbidden" responses are enforced at the backend via @PreAuthorize on each controller
+     method. The frontend also hides buttons and redirects for UI-level enforcement, but the API
+     remains the authoritative gate.
+
+  2. The "maker ≠ checker" constraint (M.19) is enforced at the service layer, not the security
+     layer. A CHECKER who calls approve on their own submission receives a business error (400/422),
+     not a 403.
+
+  3. The Cancel endpoint (M.22–M.23) has a two-layer check:
+       • Security layer: only ADMIN and MAKER roles can call the endpoint (others get 403).
+       • Service layer: among ADMIN/MAKER callers, only the original maker passes (others get 400).
+
+  4. Tests M.6, M.7, M.16, M.18, M.20, M.22 require MAKER and CHECKER test users to be active.
+     These are conditionally skipped in the E2E suite if those users are unavailable (see
+     global-setup.js and the maker-checker seed constraint).
+
+=============================================================================================================================

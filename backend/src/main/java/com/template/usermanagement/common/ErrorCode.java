@@ -24,6 +24,10 @@ public final class ErrorCode {
     public static final String PENDING_INVALID_STATUS = "WF_004";
     public static final String PENDING_NOT_AUTHORIZED = "WF_005";
 
+    // Role
+    public static final String ROLE_NOT_FOUND = "ROLE_001";
+    public static final String USER_NOT_IN_ROLE = "ROLE_002";
+
     // General
     public static final String VALIDATION_ERROR = "GEN_001";
     public static final String INTERNAL_ERROR = "GEN_002";

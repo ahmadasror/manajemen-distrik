@@ -206,12 +206,14 @@ class PendingActionServiceTest {
         }
 
         @Test
-        @DisplayName("should throw PENDING_SAME_MAKER_CHECKER when same maker and checker")
+        @DisplayName("should throw PENDING_SAME_MAKER_CHECKER when same maker and checker and multiple admins exist")
         void approve_SameMakerChecker() {
             PendingAction pa = TestFixtures.createPendingAction(
                     4L, "USER", 1L, "UPDATE", "PENDING", maker, null);
 
             when(pendingActionRepository.findById(4L)).thenReturn(Optional.of(pa));
+            when(userRepository.findById(1L)).thenReturn(Optional.of(maker));
+            when(userRepository.countActiveByRoleName("ADMIN")).thenReturn(2L);
 
             assertThatThrownBy(() -> pendingActionService.approve(4L, 1L, "Self-approve"))
                     .isInstanceOf(BusinessException.class)
@@ -219,6 +221,34 @@ class PendingActionServiceTest {
                         BusinessException bex = (BusinessException) ex;
                         assertThat(bex.getErrorCode()).isEqualTo(ErrorCode.PENDING_SAME_MAKER_CHECKER);
                     });
+        }
+
+        @Test
+        @DisplayName("should allow self-approval when checker is the sole admin in the system")
+        void approve_SelfApproval_SoleAdmin() {
+            PendingAction pa = TestFixtures.createPendingAction(
+                    6L, "USER", null, "CREATE", "PENDING", maker, null);
+            pa.setPayload(Map.of("username", "newuser", "email", "new@test.com"));
+
+            EntityApplier applier = mock(EntityApplier.class);
+            Map<String, Object> afterState = Map.of("id", 7L, "username", "newuser");
+
+            when(pendingActionRepository.findById(6L)).thenReturn(Optional.of(pa));
+            when(userRepository.findById(1L)).thenReturn(Optional.of(maker));  // for isSoleAdmin
+            when(userRepository.countActiveByRoleName("ADMIN")).thenReturn(1L);
+            when(userRepository.findById(1L)).thenReturn(Optional.of(maker));  // for checker load
+            when(entityApplierRegistry.getApplier("USER")).thenReturn(applier);
+            when(applier.applyCreate(pa.getPayload(), "maker")).thenReturn(7L);
+            when(applier.getCurrentState(7L)).thenReturn(afterState);
+            when(pendingActionRepository.save(any(PendingAction.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            PendingActionResponse result = pendingActionService.approve(6L, 1L, "Bootstrap approve");
+
+            assertThat(result.getStatus()).isEqualTo("APPROVED");
+            assertThat(result.getEntityId()).isEqualTo(7L);
+            // checker must be null on the PA to satisfy the DB constraint (maker_id != checker_id)
+            assertThat(result.getCheckerId()).isNull();
+            assertThat(result.getCheckerUsername()).isNull();
         }
 
         @Test
@@ -264,12 +294,14 @@ class PendingActionServiceTest {
         }
 
         @Test
-        @DisplayName("should throw PENDING_SAME_MAKER_CHECKER when same maker rejects")
+        @DisplayName("should throw PENDING_SAME_MAKER_CHECKER when same maker rejects and multiple admins exist")
         void reject_SameMakerChecker() {
             PendingAction pa = TestFixtures.createPendingAction(
                     2L, "USER", 1L, "UPDATE", "PENDING", maker, null);
 
             when(pendingActionRepository.findById(2L)).thenReturn(Optional.of(pa));
+            when(userRepository.findById(1L)).thenReturn(Optional.of(maker));
+            when(userRepository.countActiveByRoleName("ADMIN")).thenReturn(2L);
 
             assertThatThrownBy(() -> pendingActionService.reject(2L, 1L, "Self-reject"))
                     .isInstanceOf(BusinessException.class)

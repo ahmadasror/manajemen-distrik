@@ -1,59 +1,104 @@
 # Manajemen Distrik
 
-District Management Application with maker-checker workflow, role-based access control, and full audit trail.
+A full-stack **District Management Application** built with a **maker-checker approval workflow**, role-based access control (RBAC), Keycloak SSO, and a complete audit trail.
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Maker-Checker Workflow** | All create, update, and delete operations require approval from a second user before taking effect |
+| **Role-Based Access Control** | Four roles: `ADMIN`, `MAKER`, `CHECKER`, `VIEWER` with enforced endpoint guards |
+| **Keycloak SSO** | OIDC-based single sign-on; new Keycloak users are auto-provisioned with `VIEWER` role |
+| **Audit Trail** | Every approved action is recorded with before/after state diffs, changed fields, and a correlation ID |
+| **Soft Delete** | Records are flagged as deleted rather than physically removed |
+| **Optimistic Locking** | Version-based conflict detection on concurrent updates |
+| **Role Management** | Admin can assign/remove roles per user via a dedicated Roles UI |
+| **Dashboard** | Live stats: total users, pending actions, recent audits |
+
+---
 
 ## Tech Stack
 
 ### Backend
-- Java 17, Spring Boot 3.2.3
-- Spring Security + JWT (JJWT 0.12.5)
-- Spring Data JPA / Hibernate
-- PostgreSQL 16 (production), H2 (testing)
-- Flyway migrations
-- Lombok, Micrometer/Prometheus metrics
+- **Java 17** + **Spring Boot 3.2.3**
+- **Spring Security** + **Spring OAuth2 Resource Server** (Keycloak JWT validation)
+- **Spring Data JPA** / Hibernate + **Flyway** migrations
+- **PostgreSQL 16** (production), **H2** (tests)
+- Lombok, Micrometer / Prometheus metrics
 
 ### Frontend
-- React 19, Vite 7.3
-- Ant Design 6.x
-- Axios, React Router 7, Day.js
-- Vitest + React Testing Library
+- **React 19** + **Vite**
+- **shadcn/ui** + **Tailwind CSS v4** + **Radix UI** primitives
+- **Keycloak-js** (OIDC Authorization Code flow)
+- **Axios** + **React Router 7**
+- **Sonner** (toasts), **Lucide React** (icons)
 
-## Features
+### Infrastructure & Testing
+- **Docker Compose** — PostgreSQL
+- **Keycloak 26** — Identity Provider
+- **Playwright** — E2E test suite (52 cases across 6 modules)
+- **Vitest** + **React Testing Library** — Frontend unit tests
+- **JUnit 5** + **Mockito** — Backend unit & integration tests
 
-- **Maker-Checker Workflow** — All create/update/delete operations require approval from a different user before taking effect.
-- **Role-Based Access Control** — Four roles: `ADMIN`, `MAKER`, `CHECKER`, `VIEWER`.
-- **Soft Delete** — Records are marked as deleted instead of being physically removed.
-- **Optimistic Locking** — Prevents concurrent update conflicts using versioning.
-- **Audit Trail** — Every action is recorded with before/after state, changed fields, and correlation ID.
-- **Correlation ID Tracking** — Request tracing across the full request lifecycle.
-- **JWT Authentication** — Access and refresh token support with secure logout.
+---
 
 ## Prerequisites
 
-- JDK 21
-- Node.js 18+
-- Docker & Docker Compose (for PostgreSQL)
+| Tool | Version |
+|------|---------|
+| JDK | 17 (required — see note below) |
+| Node.js | 20+ |
+| Docker & Docker Compose | any recent version |
+| Keycloak | 26.x (run via Docker, see below) |
 
-## Getting Started
+> **Java 17 is required.** Java 21+ causes Lombok and Mockito compatibility issues in this project.
 
-### 1. Start the database
+---
+
+## Quick Start
+
+### 1. Clone and start infrastructure
 
 ```bash
-docker-compose up -d
+git clone <repo-url>
+cd manajemen-distrik
+docker-compose up -d          # starts PostgreSQL 16 on port 5432
 ```
 
-This starts PostgreSQL 16 on port `5432` with database `usermanagement`.
-
-### 2. Run the backend
+### 2. Start Keycloak
 
 ```bash
+docker run -d \
+  --name keycloak \
+  -p 8180:8080 \
+  -e KEYCLOAK_ADMIN=admin \
+  -e KEYCLOAK_ADMIN_PASSWORD=admin \
+  quay.io/keycloak/keycloak:26.0.0 start-dev
+```
+
+Then configure the realm via http://localhost:8180:
+
+1. Create realm `manajemen-distrik`
+2. Create client `manajemen-distrik-app` (OpenID Connect, public, standard flow)
+3. Set **Valid Redirect URIs**: `http://localhost:5173/*`
+4. Set **Web Origins**: `http://localhost:5173`
+5. Create user `admin` with password `admin123`
+
+### 3. Run the backend
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+
 cd backend
 ./mvnw spring-boot:run
 ```
 
-The API starts at `http://localhost:8080`. Flyway will automatically run migrations and seed initial data.
+The API starts at **https://localhost:8090**. Flyway migrations run automatically and seed an initial `admin` user.
 
-### 3. Run the frontend
+### 4. Run the frontend
 
 ```bash
 cd frontend
@@ -61,78 +106,97 @@ npm install
 npm run dev
 ```
 
-The UI starts at `http://localhost:5173`.
+The UI starts at **http://localhost:5173**.
 
-### Default Admin Credentials
+### 5. Log in
+
+Click **"Sign in with Keycloak"** on the login page and use:
 
 | Username | Password   |
 |----------|------------|
 | `admin`  | `admin123` |
 
+---
+
 ## API Endpoints
 
 ### Authentication
-| Method | Endpoint              | Description       |
-|--------|-----------------------|-------------------|
-| POST   | `/api/v1/auth/login`  | Login             |
-| POST   | `/api/v1/auth/refresh`| Refresh token     |
-| POST   | `/api/v1/auth/logout` | Logout            |
-| GET    | `/api/v1/auth/me`     | Current user info |
+| Method | Endpoint           | Auth | Description        |
+|--------|--------------------|------|--------------------|
+| GET    | `/api/v1/auth/me`  | JWT  | Current user info  |
 
 ### Users
-| Method | Endpoint           | Description   |
-|--------|--------------------|---------------|
-| GET    | `/api/v1/users`    | List users    |
-| GET    | `/api/v1/users/:id`| Get user      |
-| POST   | `/api/v1/users`    | Create user   |
-| PUT    | `/api/v1/users/:id`| Update user   |
-| DELETE | `/api/v1/users/:id`| Delete user   |
+| Method | Endpoint              | Auth            | Description  |
+|--------|-----------------------|-----------------|--------------|
+| GET    | `/api/v1/users`       | any             | List users   |
+| GET    | `/api/v1/users/{id}`  | any             | Get user     |
+| POST   | `/api/v1/users`       | MAKER, ADMIN    | Create user  |
+| PUT    | `/api/v1/users/{id}`  | MAKER, ADMIN    | Update user  |
+| DELETE | `/api/v1/users/{id}`  | MAKER, ADMIN    | Delete user  |
 
 ### Pending Actions (Maker-Checker)
-| Method | Endpoint                             | Description    |
-|--------|--------------------------------------|----------------|
-| GET    | `/api/v1/pending-actions`            | List actions   |
-| GET    | `/api/v1/pending-actions/:id`        | Get action     |
-| POST   | `/api/v1/pending-actions/:id/approve`| Approve action |
-| POST   | `/api/v1/pending-actions/:id/reject` | Reject action  |
-| POST   | `/api/v1/pending-actions/:id/cancel` | Cancel action  |
+| Method | Endpoint                                | Auth             | Description     |
+|--------|-----------------------------------------|------------------|-----------------|
+| GET    | `/api/v1/pending-actions`               | any              | List actions    |
+| GET    | `/api/v1/pending-actions/{id}`          | any              | Get action      |
+| POST   | `/api/v1/pending-actions/{id}/approve`  | CHECKER, ADMIN   | Approve action  |
+| POST   | `/api/v1/pending-actions/{id}/reject`   | CHECKER, ADMIN   | Reject action   |
+| POST   | `/api/v1/pending-actions/{id}/cancel`   | MAKER, ADMIN     | Cancel action   |
+
+### Roles
+| Method | Endpoint                              | Auth  | Description             |
+|--------|---------------------------------------|-------|-------------------------|
+| GET    | `/api/v1/roles`                       | ADMIN | List roles with counts  |
+| GET    | `/api/v1/roles/{id}`                  | ADMIN | Role detail with users  |
+| POST   | `/api/v1/roles/{roleId}/users/{userId}` | ADMIN | Assign user to role   |
+| DELETE | `/api/v1/roles/{roleId}/users/{userId}` | ADMIN | Remove user from role |
 
 ### Audit Trail
-| Method | Endpoint                                        | Description        |
-|--------|--------------------------------------------------|--------------------|
-| GET    | `/api/v1/audit-trail`                            | List audit entries |
-| GET    | `/api/v1/audit-trail/:id`                        | Get audit entry    |
-| GET    | `/api/v1/audit-trail/entity/:entityType/:entityId`| Entity history    |
+| Method | Endpoint                                          | Auth | Description          |
+|--------|---------------------------------------------------|------|----------------------|
+| GET    | `/api/v1/audit-trail`                             | any  | List audit entries   |
+| GET    | `/api/v1/audit-trail/{id}`                        | any  | Get audit entry      |
+| GET    | `/api/v1/audit-trail/entity/{entityType}/{entityId}` | any | Entity history    |
 
 ### Dashboard
-| Method | Endpoint                  | Description      |
-|--------|---------------------------|------------------|
-| GET    | `/api/v1/dashboard/stats` | Dashboard stats  |
+| Method | Endpoint                  | Auth | Description     |
+|--------|---------------------------|------|-----------------|
+| GET    | `/api/v1/dashboard/stats` | any  | Dashboard stats |
 
-## Database Schema
-
-- **users** — User accounts with soft delete and optimistic locking
-- **roles** — Role definitions (ADMIN, MAKER, CHECKER, VIEWER)
-- **user_roles** — Many-to-many user-role mapping
-- **pending_actions** — Maker-checker workflow queue with JSONB payload
-- **audit_trail** — Full audit log with before/after state diffs
-- **refresh_tokens** — JWT refresh token storage
+---
 
 ## Running Tests
 
-### Backend (218 tests)
+### Backend
 
 ```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+
 cd backend
 ./mvnw test
 ```
 
-### Frontend (130 tests)
+Tests use an H2 in-memory database — no PostgreSQL or Keycloak required.
+The `KeycloakAuthIntegrationTest` mocks the `JwtDecoder` bean so no live Keycloak is needed.
+
+### Frontend
 
 ```bash
 cd frontend
 npm run test:run
 ```
+
+### E2E (Playwright)
+
+Start the full stack first (PostgreSQL + Keycloak + backend + frontend), then:
+
+```bash
+cd e2e
+npx playwright test
+```
+
+---
 
 ## Project Structure
 
@@ -142,21 +206,74 @@ manajemen-distrik/
 │   └── src/
 │       ├── main/java/com/template/usermanagement/
 │       │   ├── audit/          # Audit trail module
-│       │   ├── common/         # Shared classes (ApiResponse, BaseEntity, exceptions)
-│       │   ├── config/         # Security, JWT, CORS, dashboard config
-│       │   ├── logging/        # Correlation ID & request/response logging
-│       │   ├── security/       # Auth controller, JWT provider, filters
-│       │   ├── user/           # User CRUD with maker-checker
-│       │   └── workflow/       # Maker-checker engine (PendingAction, EntityApplier)
-│       └── main/resources/
-│           └── db/migration/   # Flyway SQL migrations
+│       │   ├── common/         # ApiResponse, BaseEntity, exceptions, ErrorCode
+│       │   ├── config/         # SecurityConfig, WebMvcConfig, DashboardController
+│       │   ├── logging/        # Correlation ID & request/response logging filters
+│       │   ├── security/       # KeycloakJwtAuthenticationConverter, AuthController, UserDetailsImpl
+│       │   ├── user/           # User + Role CRUD (maker-checker)
+│       │   └── workflow/       # PendingAction engine (PendingActionService, EntityApplierRegistry)
+│       ├── main/resources/
+│       │   ├── application.yml         # Server config, Keycloak issuer-uri
+│       │   └── db/migration/           # Flyway production migrations
+│       └── test/resources/
+│           ├── application-test.yml    # H2 datasource override
+│           └── db/test-migration/      # Test-only Flyway migrations
 ├── frontend/
 │   └── src/
-│       ├── api/                # Axios API clients
-│       ├── auth/               # AuthContext, ProtectedRoute
-│       ├── components/         # Shared UI components
-│       ├── hooks/              # Custom hooks (useApi, usePagination, usePermission)
-│       ├── layouts/            # MainLayout with sidebar navigation
-│       └── pages/              # Login, Dashboard, Users, Pending Actions, Audit
-└── docker-compose.yml          # PostgreSQL container
+│       ├── api/                # axiosInstance, authApi, userApi, pendingActionApi, rolesApi
+│       ├── auth/               # keycloak.js singleton, AuthContext, ProtectedRoute
+│       ├── components/         # ConfirmModal, JsonDiffViewer, StatusBadge; ui/ (shadcn)
+│       ├── hooks/              # useApi, usePagination, usePermission
+│       ├── layouts/            # MainLayout (dark sidebar, responsive)
+│       ├── lib/                # cn() utility
+│       └── pages/              # Login, Dashboard, Users, Pending, Audit, Roles
+├── e2e/
+│   ├── tests/                  # 6 Playwright spec files (52 test cases)
+│   ├── helpers/                # auth.js, api.js, .auth/
+│   └── global-setup.js         # Admin login + test-user seeding
+└── docker-compose.yml          # PostgreSQL 16 container
 ```
+
+---
+
+## Architecture: How Auth Works
+
+```
+Browser
+  │
+  ├─ GET / → frontend (React + keycloak-js)
+  │          keycloak.init({ onLoad: 'check-sso' })
+  │          → redirects to Keycloak login if not authenticated
+  │
+  ├─ POST /realms/.../token → Keycloak
+  │          ← returns access_token (JWT)
+  │
+  └─ GET /api/v1/... (Bearer <access_token>) → Spring Boot backend
+             │
+             ├─ JwtDecoder validates signature against Keycloak JWKS
+             ├─ KeycloakJwtAuthenticationConverter
+             │   ├─ extracts preferred_username from JWT
+             │   ├─ looks up user in app DB
+             │   └─ auto-creates with VIEWER role if not found
+             └─ @AuthenticationPrincipal UserDetailsImpl → endpoint handler
+```
+
+> Roles are stored in the **app database**, not in Keycloak. Keycloak handles only identity (who you are); the app handles authorization (what you can do).
+
+---
+
+## Maker-Checker Workflow
+
+```
+MAKER submits request
+   ↓
+PendingAction created (status: PENDING)
+   ↓
+CHECKER (different user) reviews
+   ↓
+APPROVED → EntityApplier applies change to DB + AuditTrail recorded
+REJECTED → PendingAction marked REJECTED + AuditTrail recorded
+CANCELLED → MAKER cancels their own request
+```
+
+Special case: when the system has only **one active admin**, that admin may self-approve (sole-admin bypass) to allow initial setup bootstrapping.

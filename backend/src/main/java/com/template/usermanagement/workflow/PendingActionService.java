@@ -98,7 +98,11 @@ public class PendingActionService {
         }
 
         pa.setStatus("APPROVED");
-        pa.setChecker(checker);
+        // Sole-admin self-approval: leave checker null to satisfy DB constraint (maker_id != checker_id).
+        // The audit trail below still records who approved it.
+        if (!pa.getMaker().getId().equals(checkerId)) {
+            pa.setChecker(checker);
+        }
         pa.setRemarks(remarks);
         pendingActionRepository.save(pa);
 
@@ -121,7 +125,10 @@ public class PendingActionService {
         User checker = userRepository.findById(checkerId).orElseThrow();
 
         pa.setStatus("REJECTED");
-        pa.setChecker(checker);
+        // Sole-admin self-rejection: leave checker null to satisfy DB constraint.
+        if (!pa.getMaker().getId().equals(checkerId)) {
+            pa.setChecker(checker);
+        }
         pa.setRemarks(remarks);
         pendingActionRepository.save(pa);
 
@@ -162,9 +169,20 @@ public class PendingActionService {
         if (!"PENDING".equals(pa.getStatus())) {
             throw new BusinessException("Action is no longer pending", ErrorCode.PENDING_INVALID_STATUS);
         }
-        if (pa.getMaker().getId().equals(checkerId)) {
+        if (pa.getMaker().getId().equals(checkerId) && !isSoleAdmin(checkerId)) {
             throw new BusinessException("Maker cannot approve/reject their own action", ErrorCode.PENDING_SAME_MAKER_CHECKER);
         }
+    }
+
+    /**
+     * Returns true when the given user is an ADMIN and is the only active admin in the system.
+     * In that case, maker-checker self-approval is permitted so that the sole admin can
+     * bootstrap new users (e.g., E2E seed setup) without requiring a second admin.
+     */
+    private boolean isSoleAdmin(Long userId) {
+        User user = userRepository.findById(userId).orElseThrow();
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> "ADMIN".equals(r.getName()));
+        return isAdmin && userRepository.countActiveByRoleName("ADMIN") == 1;
     }
 
     public long countPending() {

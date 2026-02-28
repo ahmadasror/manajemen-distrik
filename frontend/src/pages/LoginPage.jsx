@@ -1,58 +1,54 @@
-import { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message, Space } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ShieldCheck, Loader2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-
-const { Title, Text } = Typography;
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
-  const { login, user } = useAuth();
+  const { user, loading, login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  if (user) {
-    navigate('/dashboard', { replace: true });
-    return null;
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <Loader2 className="h-8 w-8 animate-spin text-white" />
+      </div>
+    );
   }
 
-  const onFinish = async (values) => {
-    setLoading(true);
-    try {
-      await login(values.username, values.password);
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
-    } catch (err) {
-      message.error(err.response?.data?.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f2f5' }}>
-      <Card style={{ width: 400, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-        <Space direction="vertical" size="large" style={{ width: '100%', textAlign: 'center' }}>
-          <div>
-            <Title level={3} style={{ marginBottom: 4 }}>User Management</Title>
-            <Text type="secondary">Sign in to your account</Text>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="w-full max-w-sm px-4">
+        <div className="flex justify-center mb-6">
+          <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-primary shadow-lg shadow-primary/30">
+            <ShieldCheck className="h-8 w-8 text-white" />
           </div>
-          <Form name="login" onFinish={onFinish} size="large" style={{ textAlign: 'left' }}>
-            <Form.Item name="username" rules={[{ required: true, message: 'Please enter username' }]}>
-              <Input prefix={<UserOutlined />} placeholder="Username" />
-            </Form.Item>
-            <Form.Item name="password" rules={[{ required: true, message: 'Please enter password' }]}>
-              <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" loading={loading} block>
-                Sign In
-              </Button>
-            </Form.Item>
-          </Form>
-        </Space>
-      </Card>
+        </div>
+
+        <Card className="shadow-2xl border-0">
+          <CardHeader className="text-center pb-4">
+            <CardTitle className="text-2xl font-bold">User Management</CardTitle>
+            <CardDescription>Sign in to continue to the District Management System</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={login}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Sign In with Keycloak
+            </Button>
+          </CardContent>
+        </Card>
+
+        <p className="text-center text-xs text-slate-400 mt-4">
+          District Management System
+        </p>
+      </div>
     </div>
   );
 }

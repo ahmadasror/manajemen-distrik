@@ -1,0 +1,285 @@
+=============================================================================================================================
+                         MANAJEMEN DISTRIK — TEST CASE DOCUMENT
+                               Business Analyst Perspective
+=============================================================================================================================
+  Version     : 1.0
+  Date        : 27 February 2026
+  Application : District Management (Manajemen Distrik)
+  Prepared by : Business Analyst Team
+=============================================================================================================================
+
+  ROLE GLOSSARY
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ADMIN    : System administrator. Has full access to all features.
+  MAKER    : Staff who submits data change requests for approval.
+  CHECKER  : Supervisor who reviews and approves or rejects Maker submissions.
+             Note: A Checker may not approve a request they submitted themselves.
+  VIEWER   : Read-only user. May view data only. Cannot create, edit, or approve anything.
+
+  TABLE OF CONTENTS
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. Login & Session Management  ..........................  10 cases
+  2. User Management  .....................................  12 cases
+  3. Approval Workflow (Maker-Checker)  ...................  12 cases
+  4. Activity History (Audit Trail)  ......................   7 cases
+  5. Dashboard  ...........................................   3 cases
+  6. Access Control  ......................................   8 cases
+                                                                              ──────────
+                                                                              52 cases
+
+=============================================================================================================================
+  1. LOGIN & SESSION MANAGEMENT
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.1  | User logs in with correct credentials         | Positive | Username : admin                       | Login successful. User is directed to          |
+|      |                                               |          | Password : admin123                    | the dashboard.                                 |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.2  | Logged-in user views their own profile        | Positive | Active session (logged in as admin)    | Profile page shows full name, email,           |
+|      |                                               |          |                                        | phone, and assigned role.                      |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.3  | User renews session before it expires         | Positive | Valid refresh token from current       | Session renewed. New access token              |
+|      |                                               |          | session                                | issued without requiring re-login.             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.4  | User logs out of the system                   | Positive | Active session (logged in)             | Logged out successfully. Session               |
+|      |                                               |          |                                        | invalidated and cannot be reused.              |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.5  | User logs in with wrong password              | Negative | Username : admin                       | Login fails. Message:                          |
+|      |                                               |          | Password : wrongpassword               | 'Invalid username or password.'                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.6  | User logs in with unregistered username       | Negative | Username : unknownuser                 | Login fails. Message:                          |
+|      |                                               |          | Password : any123                      | 'Invalid username or password.'                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.7  | User submits login form with empty fields     | Negative | Username : (empty)                     | Login fails. All required fields               |
+|      |                                               |          | Password : (empty)                     | show validation messages.                      |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.8  | User accesses a page without logging in       | Negative | No active session                      | Access denied. User is redirected              |
+|      |                                               |          |                                        | to the login page.                             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.9  | User accesses a page with a corrupted token   | Negative | Tampered or invalid session token      | Access denied. User is redirected              |
+|      |                                               |          |                                        | to the login page.                             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 1.10 | User reuses their session after logging out   | Negative | Previously revoked session token       | Access denied. Session is no                   |
+|      |                                               |          |                                        | longer valid.                                  |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  2. USER MANAGEMENT
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.1  | Administrator views the list of all users     | Positive | Role : ADMIN (logged in)               | User list displayed showing name,              |
+|      |                                               |          |                                        | email, role, and status per record.            |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.2  | Administrator views a specific user detail    | Positive | Select any existing user               | Full name, email, phone, role, and             |
+|      |                                               |          |                                        | account status are displayed.                  |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.3  | Maker submits a new user creation request     | Positive | Full Name : Test Maker                 | Request submitted. Pending approval            |
+|      |                                               |          | Username  : maker01                    | record created. New user is NOT                |
+|      |                                               |          | Email     : maker01@company.com        | active until a Checker approves.               |
+|      |                                               |          | Password  : Maker@1234                 |                                                |
+|      |                                               |          | Role      : MAKER                      |                                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.4  | Maker submits a request to update a user      | Positive | Select existing active user            | Change request submitted. Pending              |
+|      |                                               |          | Full Name : John Doe Updated           | approval record created. User data             |
+|      |                                               |          | Phone     : 0812-0000-0000             | unchanged until a Checker approves.            |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.5  | Maker submits a request to deactivate a user  | Positive | Select any existing active user        | Deactivation request submitted.                |
+|      |                                               |          |                                        | Pending record created. User stays             |
+|      |                                               |          |                                        | active until a Checker approves.               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.6  | Maker creates user with duplicate username    | Negative | Username : admin (already exists)      | Request rejected. Message:                     |
+|      |                                               |          | Email    : new@company.com             | 'Username is already taken.'                   |
+|      |                                               |          | Role     : VIEWER                      |                                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.7  | Maker creates user with duplicate email       | Negative | Username : newuser                     | Request rejected. Message:                     |
+|      |                                               |          | Email    : admin@template.com          | 'Email address is already registered.'         |
+|      |                                               |          |              (already registered)      |                                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.8  | Maker submits incomplete user creation form   | Negative | Full Name : (empty)                    | Submission fails. All required fields          |
+|      |                                               |          | Username  : (empty)                    | are highlighted with validation                |
+|      |                                               |          | Email     : (empty)                    | messages.                                      |
+|      |                                               |          | Password  : (empty)                    |                                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.9  | Maker enters an invalid email address format  | Negative | Email : not-an-email-address           | Submission fails. Message:                     |
+|      |                                               |          |                                        | 'Please enter a valid email address.'          |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.10 | Maker enters a password that is too weak      | Negative | Password : 123                         | Submission fails. Message:                     |
+|      |                                               |          |                                        | 'Password does not meet security               |
+|      |                                               |          |                                        | requirements.'                                 |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.11 | User searches for a non-existent user         | Negative | User ID : 99999 (does not exist)       | Message: 'No user found.'                      |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 2.12 | Viewer attempts to create a new user          | Negative | Role   : VIEWER (logged in)            | Action blocked. Message: 'You do               |
+|      |                                               |          | Action : Fill user creation form       | not have permission to do this.'               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  3. APPROVAL WORKFLOW (MAKER-CHECKER)
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.1  | Checker views all pending approval requests   | Positive | Role : CHECKER (logged in)             | Pending list shows: requester name,            |
+|      |                                               |          |                                        | action type, target, and date.                 |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.2  | Checker filters the pending list by status    | Positive | Status filter : PENDING                | Only PENDING status records are                |
+|      |                                               |          |                                        | displayed in the list.                         |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.3  | Checker views detail of a pending request     | Positive | Select any PENDING request from list   | Detail shows: requested change,                |
+|      |                                               |          |                                        | original vs proposed data, requester           |
+|      |                                               |          |                                        | name, and submission date.                     |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.4  | Checker approves a pending request            | Positive | Role    : CHECKER                      | Request approved. Change is applied            |
+|      |                                               |          | (different person from the Maker)      | immediately. Status changes to                 |
+|      |                                               |          | Remarks : 'Approved'                   | APPROVED.                                      |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.5  | Checker rejects a pending request             | Positive | Role    : CHECKER                      | Request rejected. Status changes to            |
+|      |                                               |          | Remarks : 'Data is incorrect,          | REJECTED. Maker can view the                   |
+|      |                                               |          |           please revise.'              | rejection reason.                              |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.6  | Maker cancels their own pending request       | Positive | Role    : MAKER (same submitter)       | Request cancelled. Status changes to           |
+|      |                                               |          | Remarks : 'Submitted by mistake.'      | CANCELLED. No changes are applied.             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.7  | Maker tries to approve their own request      | Negative | Role   : MAKER                         | Approval blocked. Message:                     |
+|      |                                               |          | Select own PENDING request             | 'You cannot approve your own request.'         |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.8  | Checker approves an already-approved request  | Negative | Select a request with status:          | Action blocked. Message: 'This                 |
+|      |                                               |          | APPROVED                               | request has already been processed.'           |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.9  | Checker approves an already-cancelled request | Negative | Select a request with status:          | Action blocked. Message: 'This                 |
+|      |                                               |          | CANCELLED                              | request has already been cancelled.'           |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.10 | Checker rejects a request without a reason    | Negative | Remarks : (empty)                      | Rejection blocked. Message: 'A                 |
+|      |                                               |          |                                        | reason is required to reject.'                 |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.11 | Viewer tries to approve a pending request     | Negative | Role   : VIEWER (logged in)            | Approve and reject buttons are not             |
+|      |                                               |          | Action : Open any pending request      | visible. Action is blocked if                  |
+|      |                                               |          |                                        | attempted directly.                            |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 3.12 | Maker tries to approve a pending request      | Negative | Role   : MAKER (logged in)             | Action blocked. Message: 'You do               |
+|      |                                               |          | Select a PENDING request from          | not have permission to approve.'               |
+|      |                                               |          | another Maker                          |                                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  4. ACTIVITY HISTORY (AUDIT TRAIL)
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.1  | Administrator views the full activity history | Positive | Role : ADMIN (logged in)               | Full activity list displayed showing:          |
+|      |                                               |          |                                        | who performed the action, what was             |
+|      |                                               |          |                                        | changed, when, before & after data.            |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.2  | Administrator browses history page by page    | Positive | Role      : ADMIN                      | History shown 5 records per page               |
+|      |                                               |          | Page size : 5 records per page         | with navigation controls.                      |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.3  | Admin views activity history for a user       | Positive | Role   : ADMIN                         | All activities related to that user            |
+|      |                                               |          | Select : admin                         | shown in chronological order.                  |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.4  | Admin views detail of an activity record      | Positive | Select any entry from activity list    | Shows: action type, before state,              |
+|      |                                               |          |                                        | after state, changed fields, who               |
+|      |                                               |          |                                        | performed it, and timestamp.                   |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.5  | Admin opens a non-existent activity record    | Negative | Activity record ID : 99999             | Message: 'Activity record not found.'          |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.6  | User accesses activity history without login  | Negative | No active session                      | Access denied. User is redirected              |
+|      |                                               |          |                                        | to the login page.                             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 4.7  | Maker tries to access activity history        | Negative | Role : MAKER (logged in)               | Access denied. Message: 'You do                |
+|      |                                               |          |                                        | not have permission to view this.'             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  5. DASHBOARD
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 5.1  | Administrator views dashboard statistics      | Positive | Role : ADMIN (logged in)               | Dashboard shows: total users, pending          |
+|      |                                               |          |                                        | approvals, recent activity, and                |
+|      |                                               |          |                                        | system summary counts.                         |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 5.2  | Viewer views dashboard statistics             | Positive | Role : VIEWER (logged in)              | Dashboard shows available statistics           |
+|      |                                               |          |                                        | based on Viewer access level.                  |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 5.3  | User accesses dashboard without logging in    | Negative | No active session                      | Access denied. User is redirected              |
+|      |                                               |          |                                        | to the login page.                             |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  6. ACCESS CONTROL
+=============================================================================================================================
+
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| No.  | Scenario                                      | Type     | Test Data                              | Expected Result                                |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.1  | ADMIN can perform all user management actions | Positive | Role : ADMIN (logged in)               | Create, view, edit, and deactivate             |
+|      |                                               |          |                                        | actions are all accessible.                    |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.2  | MAKER can submit user management requests     | Positive | Role : MAKER (logged in)               | Create, edit, deactivate request forms         |
+|      |                                               |          |                                        | are accessible. Approve and reject             |
+|      |                                               |          |                                        | actions are not available.                     |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.3  | CHECKER can process approval requests         | Positive | Role : CHECKER (logged in)             | Approve and reject actions accessible          |
+|      |                                               |          |                                        | on pending requests. User creation             |
+|      |                                               |          |                                        | form is not available.                         |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.4  | VIEWER can only read data                     | Positive | Role : VIEWER (logged in)              | User list, detail, and dashboard are           |
+|      |                                               |          |                                        | accessible. No create, edit, delete,           |
+|      |                                               |          |                                        | or approve buttons are shown.                  |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.5  | VIEWER cannot submit a user creation request  | Negative | Role   : VIEWER (logged in)            | Action blocked. Message: 'You do               |
+|      |                                               |          | Action : Access user creation form     | not have permission to do this.'               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.6  | VIEWER cannot approve any request             | Negative | Role   : VIEWER (logged in)            | Action blocked. Message: 'You do               |
+|      |                                               |          | Action : Approve a pending request     | not have permission to do this.'               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.7  | MAKER cannot approve any request              | Negative | Role   : MAKER (logged in)             | Action blocked. Message: 'You do               |
+|      |                                               |          | Action : Approve a pending request     | not have permission to approve.'               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+| 6.8  | CHECKER cannot submit a user creation request | Negative | Role   : CHECKER (logged in)           | Action blocked. Message: 'You do               |
+|      |                                               |          | Action : Create a new user             | not have permission to do this.'               |
++------+-----------------------------------------------+----------+----------------------------------------+------------------------------------------------+
+
+
+=============================================================================================================================
+  EXECUTION NOTES
+=============================================================================================================================
+
+  Run Order
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Execute sections in order: 1 → 2 → 3 → 4 → 5 → 6.
+  Section 3 depends on pending records created during Section 2.
+  Section 6 role tests require separate login sessions per role.
+
+  Prerequisite Users
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Seeded by default (available on fresh install):
+    Username : admin  |  Password : admin123  |  Role : ADMIN
+
+  For role-specific tests (Sections 3 and 6), first create and approve:
+    A MAKER user   — for testing Maker-only actions
+    A CHECKER user — for testing Checker-only actions
+    A VIEWER user  — for testing Viewer restrictions
+
+  Data Isolation
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Tests in Sections 2 and 3 create records in the database.
+  Re-running tests requires either a fresh database or unique usernames
+  (e.g., append a timestamp: maker_20260227).
+
+=============================================================================================================================

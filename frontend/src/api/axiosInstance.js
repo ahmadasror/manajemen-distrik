@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { TOKEN_KEY, REFRESH_TOKEN_KEY } from '../utils/constants';
+import keycloak from '../auth/keycloak';
 import { generateCorrelationId } from '../utils/correlationId';
 
 const axiosInstance = axios.create({
@@ -9,12 +9,18 @@ const axiosInstance = axios.create({
   },
 });
 
-// Request interceptor: attach JWT + correlation ID
+// Request interceptor: refresh Keycloak token then attach it + correlation ID
 axiosInstance.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    if (keycloak.authenticated) {
+      try {
+        // Refresh token if it expires within 30 seconds
+        await keycloak.updateToken(30);
+      } catch {
+        keycloak.logout();
+        return Promise.reject(new Error('Session expired'));
+      }
+      config.headers.Authorization = `Bearer ${keycloak.token}`;
     }
     config.headers['X-Correlation-ID'] = generateCorrelationId();
     return config;
@@ -22,36 +28,13 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401 + token refresh
+// Response interceptor: on 401, trigger Keycloak re-login
 axiosInstance.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (refreshToken) {
-        try {
-          const res = await axios.post('/api/v1/auth/refresh', { refreshToken });
-          const { accessToken, refreshToken: newRefreshToken } = res.data.data;
-          localStorage.setItem(TOKEN_KEY, accessToken);
-          localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          return axiosInstance(originalRequest);
-        } catch (refreshError) {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
-          window.location.href = '/login';
-          return Promise.reject(refreshError);
-        }
-      } else {
-        localStorage.removeItem(TOKEN_KEY);
-        window.location.href = '/login';
-      }
+  (error) => {
+    if (error.response?.status === 401) {
+      keycloak.login();
     }
-
     return Promise.reject(error);
   }
 );

@@ -1,36 +1,48 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Input, Space, Tag, message } from 'antd';
-import { PlusOutlined, SearchOutlined, EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Eye, Pencil, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { userApi } from '../../api/userApi';
 import { usePermission } from '../../hooks/usePermission';
 import { formatDateTime } from '../../utils/formatters';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { Card, CardContent } from '@/components/ui/card';
+
+const ROLE_VARIANT = {
+  ADMIN: 'destructive',
+  MAKER: 'info',
+  CHECKER: 'success',
+  VIEWER: 'secondary',
+};
 
 export default function UserListPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
   const navigate = useNavigate();
   const { canCreate } = usePermission();
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await userApi.getAll({
-        page: pagination.current - 1,
-        size: pagination.pageSize,
-        search: search || undefined,
-      });
+      const res = await userApi.getAll({ page, size: pageSize, search: search || undefined });
       const data = res.data.data;
       setUsers(data.content);
-      setPagination((prev) => ({ ...prev, total: data.totalElements }));
+      setTotal(data.totalElements);
     } catch {
-      message.error('Failed to fetch users');
+      toast.error('Failed to fetch users');
     } finally {
       setLoading(false);
     }
-  }, [pagination.current, pagination.pageSize, search]);
+  }, [page, pageSize, search]);
 
   useEffect(() => {
     fetchUsers();
@@ -39,84 +51,163 @@ export default function UserListPage() {
   const handleDelete = async (id) => {
     try {
       await userApi.delete(id);
-      message.success('Delete request submitted for approval');
+      toast.success('Delete request submitted for approval');
       fetchUsers();
     } catch (err) {
-      message.error(err.response?.data?.message || 'Failed to submit delete request');
+      toast.error(err.response?.data?.message || 'Failed to submit delete request');
     }
   };
 
-  const columns = [
-    { title: 'Username', dataIndex: 'username', key: 'username' },
-    { title: 'Full Name', dataIndex: 'fullName', key: 'fullName' },
-    { title: 'Email', dataIndex: 'email', key: 'email' },
-    {
-      title: 'Roles',
-      dataIndex: 'roles',
-      key: 'roles',
-      render: (roles) => roles?.map((r) => <Tag key={r} color="blue">{r}</Tag>),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'isActive',
-      key: 'isActive',
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
-    },
-    {
-      title: 'Created',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: formatDateTime,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_, record) => (
-        <Space>
-          <Button type="link" icon={<EyeOutlined />} onClick={() => navigate(`/users/${record.id}`)} />
-          {canCreate && (
-            <>
-              <Button type="link" icon={<EditOutlined />} onClick={() => navigate(`/users/${record.id}/edit`)} />
-              <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />
-            </>
-          )}
-        </Space>
-      ),
-    },
-  ];
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>Users</h2>
-        <Space>
-          <Input
-            placeholder="Search users..."
-            prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, current: 1 })); }}
-            style={{ width: 250 }}
-            allowClear
-          />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Users</h2>
+          <p className="text-sm text-muted-foreground">{total} total users</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="pl-8 w-56"
+            />
+          </div>
           {canCreate && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/users/new')}>
+            <Button onClick={() => navigate('/users/new')}>
+              <Plus className="h-4 w-4" />
               Add User
             </Button>
           )}
-        </Space>
+        </div>
       </div>
-      <Table
-        columns={columns}
-        dataSource={users}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total} users`,
-        }}
-        onChange={(pag) => setPagination({ ...pagination, current: pag.current, pageSize: pag.pageSize })}
-      />
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Full Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Roles</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                    No users found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.username}</TableCell>
+                    <TableCell>{user.fullName}</TableCell>
+                    <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {user.roles?.map((r) => (
+                          <Badge key={r} variant={ROLE_VARIANT[r] || 'secondary'} className="text-xs">
+                            {r}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive ? 'success' : 'destructive'}>
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {formatDateTime(user.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => navigate(`/users/${user.id}`)}
+                          title="View"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {canCreate && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => navigate(`/users/${user.id}/edit`)}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(user.id)}
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-3">
+              Page {page + 1} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

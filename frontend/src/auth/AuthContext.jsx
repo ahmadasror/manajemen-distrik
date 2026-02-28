@@ -1,16 +1,17 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import keycloak from './keycloak';
 import { authApi } from '../api/authApi';
-import { TOKEN_KEY, REFRESH_TOKEN_KEY } from '../utils/constants';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const initialized = useRef(false);
 
   const fetchUser = useCallback(async () => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
+    if (!keycloak.authenticated) {
+      setUser(null);
       setLoading(false);
       return;
     }
@@ -18,8 +19,6 @@ export function AuthProvider({ children }) {
       const res = await authApi.me();
       setUser(res.data.data);
     } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setUser(null);
     } finally {
       setLoading(false);
@@ -27,27 +26,41 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    fetchUser();
+    if (initialized.current) return;
+    initialized.current = true;
+
+    keycloak
+      .init({
+        onLoad: 'check-sso',
+        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+        pkceMethod: 'S256',
+      })
+      .then(() => {
+        fetchUser();
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+
+    // Refresh token before it expires
+    const interval = setInterval(() => {
+      if (keycloak.authenticated) {
+        keycloak.updateToken(60).catch(() => {
+          keycloak.logout();
+        });
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [fetchUser]);
 
-  const login = async (username, password) => {
-    const res = await authApi.login({ username, password });
-    const { accessToken, refreshToken, user: userData } = res.data.data;
-    localStorage.setItem(TOKEN_KEY, accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    setUser(userData);
-    return userData;
+  const login = () => {
+    keycloak.login();
   };
 
-  const logout = async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      // ignore
-    }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  const logout = () => {
     setUser(null);
+    keycloak.logout({ redirectUri: window.location.origin });
   };
 
   const hasRole = (role) => {

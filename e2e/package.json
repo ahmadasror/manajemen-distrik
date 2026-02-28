@@ -1,0 +1,22 @@
+{
+  "name": "manajemen-distrik-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
+    "test:section1": "playwright test tests/01-login.spec.js",
+    "test:section2": "playwright test tests/02-user-management.spec.js",
+    "test:section3": "playwright test tests/03-pending-actions.spec.js",
+    "test:section4": "playwright test tests/04-audit-trail.spec.js",
+    "test:section5": "playwright test tests/05-dashboard.spec.js",
+    "test:section6": "playwright test tests/06-access-control.spec.js",
+    "test:section7": "playwright test tests/07-role-matrix.spec.js",
+    "sanity-check": "node sanity-check.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

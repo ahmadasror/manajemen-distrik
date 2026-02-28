@@ -24,7 +24,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "OR LOWER(u.email) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))")
     Page<User> findAllActive(@Param("search") String search, Pageable pageable);
 
+    @Query("SELECT u FROM User u JOIN u.roles r WHERE r.id = :roleId AND u.deleted = false")
+    java.util.List<User> findAllByRoleId(@Param("roleId") Long roleId);
+
     long countByDeletedFalse();
 
     long countByIsActiveTrueAndDeletedFalse();
+
+    @Query("SELECT COUNT(u) FROM User u JOIN u.roles r WHERE r.name = :roleName AND u.deleted = false AND u.isActive = true")
+    long countActiveByRoleName(@Param("roleName") String roleName);
 }

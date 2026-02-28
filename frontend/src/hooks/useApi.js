@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { message } from 'antd';
+import { toast } from 'sonner';
 
 export function useApi(apiFunc) {
   const [data, setData] = useState(null);
@@ -16,7 +16,7 @@ export function useApi(apiFunc) {
     } catch (err) {
       const errMsg = err.response?.data?.message || err.message || 'An error occurred';
       setError(errMsg);
-      message.error(errMsg);
+      toast.error(errMsg);
       throw err;
     } finally {
       setLoading(false);

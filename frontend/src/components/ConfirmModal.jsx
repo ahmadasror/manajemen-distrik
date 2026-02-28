@@ -1,10 +1,28 @@
-import { Modal, Input, Form } from 'antd';
 import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
-export default function ConfirmModal({ open, title, message, onConfirm, onCancel, loading, showRemarks = false }) {
+export default function ConfirmModal({
+  open,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  loading,
+  showRemarks = false,
+}) {
   const [remarks, setRemarks] = useState('');
 
-  const handleOk = () => {
+  const handleConfirm = () => {
     onConfirm(showRemarks ? remarks : undefined);
     setRemarks('');
   };
@@ -15,26 +33,35 @@ export default function ConfirmModal({ open, title, message, onConfirm, onCancel
   };
 
   return (
-    <Modal
-      open={open}
-      title={title}
-      onOk={handleOk}
-      onCancel={handleCancel}
-      confirmLoading={loading}
-      okText="Confirm"
-      cancelText="Cancel"
-    >
-      <p>{message}</p>
-      {showRemarks && (
-        <Form.Item label="Remarks">
-          <Input.TextArea
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-            rows={3}
-            placeholder="Enter remarks (optional)"
-          />
-        </Form.Item>
-      )}
-    </Modal>
+    <Dialog open={open} onOpenChange={(v) => !v && handleCancel()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
+
+        {showRemarks && (
+          <div className="grid gap-2">
+            <Label htmlFor="remarks">Remarks (optional)</Label>
+            <Textarea
+              id="remarks"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={3}
+              placeholder="Enter remarks..."
+            />
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleCancel} disabled={loading}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={loading}>
+            {loading ? 'Processing...' : 'Confirm'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

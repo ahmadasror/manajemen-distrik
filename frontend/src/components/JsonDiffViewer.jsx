@@ -1,66 +1,61 @@
-import { Typography, Table } from 'antd';
-
-const { Text } = Typography;
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 export default function JsonDiffViewer({ before, after, changedFields }) {
-  if (!before && !after) return <Text type="secondary">No data</Text>;
+  if (!before && !after) {
+    return <p className="text-sm text-muted-foreground">No data</p>;
+  }
 
   const allKeys = new Set([
     ...Object.keys(before || {}),
     ...Object.keys(after || {}),
   ]);
 
-  const dataSource = Array.from(allKeys)
+  const rows = Array.from(allKeys)
     .filter((key) => key !== 'passwordHash')
     .map((key) => ({
       key,
       field: key,
       before: before?.[key],
       after: after?.[key],
-      changed: changedFields?.includes(key) ||
+      changed:
+        changedFields?.includes(key) ||
         JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key]),
     }));
 
-  const columns = [
-    {
-      title: 'Field',
-      dataIndex: 'field',
-      key: 'field',
-      render: (text, record) => (
-        <Text strong={record.changed} type={record.changed ? 'warning' : undefined}>
-          {text}
-        </Text>
-      ),
-    },
-    {
-      title: 'Before',
-      dataIndex: 'before',
-      key: 'before',
-      render: (val, record) => (
-        <Text delete={record.changed} type={record.changed ? 'danger' : undefined}>
-          {val !== undefined && val !== null ? String(val) : '-'}
-        </Text>
-      ),
-    },
-    {
-      title: 'After',
-      dataIndex: 'after',
-      key: 'after',
-      render: (val, record) => (
-        <Text type={record.changed ? 'success' : undefined}>
-          {val !== undefined && val !== null ? String(val) : '-'}
-        </Text>
-      ),
-    },
-  ];
-
   return (
-    <Table
-      dataSource={dataSource}
-      columns={columns}
-      pagination={false}
-      size="small"
-      rowClassName={(record) => (record.changed ? 'diff-changed-row' : '')}
-    />
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Field</TableHead>
+          <TableHead>Before</TableHead>
+          <TableHead>After</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow
+            key={row.key}
+            className={cn(row.changed && 'bg-yellow-50')}
+          >
+            <TableCell>
+              <span className={cn('text-sm', row.changed && 'font-semibold text-yellow-700')}>
+                {row.field}
+              </span>
+            </TableCell>
+            <TableCell>
+              <span className={cn('text-sm', row.changed && 'line-through text-red-500')}>
+                {row.before !== undefined && row.before !== null ? String(row.before) : '-'}
+              </span>
+            </TableCell>
+            <TableCell>
+              <span className={cn('text-sm', row.changed && 'text-green-600 font-medium')}>
+                {row.after !== undefined && row.after !== null ? String(row.after) : '-'}
+              </span>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

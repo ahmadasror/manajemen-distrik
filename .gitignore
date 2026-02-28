@@ -1,17 +1,30 @@
-# Backend
+# ── Backend ─────────────────────────────────────────────────────────────────
 backend/target/
 *.class
 *.jar
 *.war
 *.ear
-*.log
 
-# Frontend
+# ── Frontend ─────────────────────────────────────────────────────────────────
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 
-# IDE
+# ── E2E ──────────────────────────────────────────────────────────────────────
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+e2e/helpers/.auth/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.iml
@@ -21,6 +34,16 @@ frontend/dist-ssr/
 *.sln
 *.sw?
 .DS_Store
+Thumbs.db
 
-# Environment
+# ── Environment ──────────────────────────────────────────────────────────────
+.env
 *.local
+
+# ── SSL / Keystores ──────────────────────────────────────────────────────────
+ssl/
+backend/src/main/resources/keystore.p12
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.tmp
+*.bak
