@@ -229,6 +229,23 @@ public class WilayahService {
     // ─── SubDistrict ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    /**
+     * Inquiry endpoint: semua filter optional dan dikombinasikan dengan AND.
+     * Jika name/zipCode diisi, filter provinsi/state/district tetap diterapkan.
+     */
+    public Page<SubDistrictResponse> inquiry(String q, String zipCode,
+                                             String provinceId, String stateId, String districtId,
+                                             Pageable pageable) {
+        String name      = (q        != null && !q.isBlank())        ? q.trim()        : null;
+        String zip       = (zipCode  != null && !zipCode.isBlank())  ? zipCode.trim()  : null;
+        String provId    = (provinceId != null && !provinceId.isBlank()) ? provinceId  : null;
+        String stId      = (stateId  != null && !stateId.isBlank())  ? stateId         : null;
+        String distId    = (districtId != null && !districtId.isBlank()) ? districtId  : null;
+        return subDistrictRepository.inquiry(name, zip, distId, stId, provId, pageable)
+                .map(SubDistrictResponse::from);
+    }
+
+    @Transactional(readOnly = true)
     public Page<SubDistrictResponse> searchSubDistricts(String districtId, String zipCode, String search, Pageable pageable) {
         if (zipCode != null && !zipCode.isBlank()) {
             return subDistrictRepository.findByZipCode(zipCode, pageable).map(SubDistrictResponse::from);

@@ -231,7 +231,9 @@ public class WilayahController {
             @RequestParam(required = false) String stateId,
             @RequestParam(required = false) String districtId) {
         int size = 50;
-        Page<SubDistrictResponse> result = wilayahService.searchSubDistricts(districtId, zipCode, q, PageRequest.of(page, size, Sort.by("name").ascending()));
+        Page<SubDistrictResponse> result = wilayahService.inquiry(
+                q, zipCode, provinceId, stateId, districtId,
+                PageRequest.of(page, size, Sort.by("name").ascending()));
         return ResponseEntity.ok(ApiResponse.success(PageResponse.of(result)));
     }
 }
