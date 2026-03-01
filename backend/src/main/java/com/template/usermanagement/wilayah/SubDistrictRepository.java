@@ -23,13 +23,17 @@ public interface SubDistrictRepository extends JpaRepository<SubDistrict, String
     /**
      * Flexible inquiry query — all filters are optional and combined with AND.
      * Null/blank params are ignored (match everything for that dimension).
+     *
+     * <p>Uses COALESCE instead of IS NULL to force PostgreSQL to infer varchar
+     * type for null parameters; otherwise the LOWER() call fails with
+     * "function lower(bytea) does not exist".
      */
     @Query("SELECT sd FROM SubDistrict sd " +
-           "WHERE (:name    IS NULL OR LOWER(sd.name)    LIKE LOWER(CONCAT('%', :name,    '%'))) " +
-           "AND   (:zipCode IS NULL OR sd.zipCode        = :zipCode) " +
-           "AND   (:districtId  IS NULL OR sd.district.districtId               = :districtId) " +
-           "AND   (:stateId     IS NULL OR sd.district.state.stateId            = :stateId) " +
-           "AND   (:provinceId  IS NULL OR sd.district.state.province.provinceId = :provinceId)")
+           "WHERE (COALESCE(:name,       '') = '' OR LOWER(sd.name)  LIKE LOWER(CONCAT('%', :name, '%'))) " +
+           "AND   (COALESCE(:zipCode,    '') = '' OR sd.zipCode      = :zipCode) " +
+           "AND   (COALESCE(:districtId, '') = '' OR sd.district.districtId               = :districtId) " +
+           "AND   (COALESCE(:stateId,    '') = '' OR sd.district.state.stateId            = :stateId) " +
+           "AND   (COALESCE(:provinceId, '') = '' OR sd.district.state.province.provinceId = :provinceId)")
     Page<SubDistrict> inquiry(@Param("name")       String name,
                               @Param("zipCode")    String zipCode,
                               @Param("districtId") String districtId,
