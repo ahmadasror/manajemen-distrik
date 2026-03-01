@@ -14,6 +14,7 @@ import {
   Map,
   Search,
   Upload,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission } from '../hooks/usePermission';
@@ -70,6 +71,7 @@ export default function MainLayout() {
     { path: '/wilayah', icon: Map, label: 'Data Wilayah' },
     { path: '/wilayah/inquiry', icon: Search, label: 'Inquiry Wilayah' },
     ...((isAdmin || canCreate) ? [{ path: '/wilayah/bulk-upload', icon: Upload, label: 'Bulk Upload' }] : []),
+    ...(isAdmin ? [{ path: '/settings', icon: Settings, label: 'Pengaturan' }] : []),
   ];
 
   const activeBase = location.pathname;

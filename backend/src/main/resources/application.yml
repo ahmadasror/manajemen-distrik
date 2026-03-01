@@ -65,8 +65,7 @@ cors:
   allowed-headers: "*"
   allow-credentials: true
 
-wilayah:
-  validation:
-    # Active provider for the GET /api/v1/wilayah/validate endpoint.
-    # Options: wikipedia | nominatim
-    provider: wikipedia
+system:
+  settings:
+    # AES encryption key for secret settings (API keys). Change in production!
+    encryption-key: ${SETTINGS_ENCRYPTION_KEY:change-me-in-production!}

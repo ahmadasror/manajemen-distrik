@@ -17,6 +17,7 @@ import RoleDetailPage from './pages/roles/RoleDetailPage';
 import WilayahPage from './pages/wilayah/WilayahPage';
 import WilayahInquiryPage from './pages/wilayah/WilayahInquiryPage';
 import BulkUploadPage from './pages/wilayah/BulkUploadPage';
+import SettingsPage from './pages/settings/SettingsPage';
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="wilayah" element={<WilayahPage />} />
             <Route path="wilayah/inquiry" element={<WilayahInquiryPage />} />
             <Route path="wilayah/bulk-upload" element={<ProtectedRoute roles={['ADMIN', 'MAKER']}><BulkUploadPage /></ProtectedRoute>} />
+            <Route path="settings" element={<ProtectedRoute roles={['ADMIN']}><SettingsPage /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

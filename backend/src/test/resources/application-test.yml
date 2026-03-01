@@ -28,6 +28,10 @@ jwt:
 cors:
   allowed-origins: http://localhost:3000,http://localhost:5173
 
+system:
+  settings:
+    encryption-key: test-encryption-key-1234
+
 logging:
   level:
     com.template: WARN

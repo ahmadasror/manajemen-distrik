@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   ShieldCheck, ShieldAlert, ShieldX, ShieldQuestion,
-  MapPin, ChevronDown, ChevronUp,
+  MapPin, ChevronDown, ChevronUp, Info, AlertTriangle,
 } from 'lucide-react';
 import { wilayahApi } from '../../api/wilayahApi';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,15 @@ import {
 } from '@/components/ui/select';
 
 const PAGE_SIZE = 50;
+
+/** Data dianggap suspek jika: kode pos kosong/00000, ada angka di nama, atau nama ≤ 2 huruf */
+function isSuspect(sd) {
+  const zip = sd.zipCode?.trim();
+  if (!zip || zip === '00000') return true;
+  if (/\d/.test(sd.name)) return true;
+  if (sd.name.trim().length <= 2) return true;
+  return false;
+}
 
 // ─── Validation badge config ──────────────────────────────────────────────────
 
@@ -38,21 +47,32 @@ function ValidationBadge({ status }) {
   );
 }
 
+function SourceTag({ label }) {
+  if (!label) return null;
+  return (
+    <span className="ml-1 text-[10px] font-normal text-muted-foreground/70 bg-muted rounded px-1 py-0.5">
+      {label}
+    </span>
+  );
+}
+
 function ValidationDetail({ result }) {
+  const fs = result.fieldSources || {};
   return (
     <div className="text-xs space-y-1.5 py-2 px-3 bg-muted/40 rounded-lg border">
       <div className="flex flex-wrap gap-x-6 gap-y-1">
         <span>
-          <span className="text-muted-foreground">Nama OSM: </span>
+          <span className="text-muted-foreground">Nama: </span>
           <strong>{result.nominatimName || '—'}</strong>
           {result.nameSimilarity != null && (
             <span className={`ml-1.5 font-semibold ${result.nameSimilarity >= 80 ? 'text-green-700' : 'text-red-600'}`}>
               ({result.nameSimilarity}% match)
             </span>
           )}
+          <SourceTag label={fs.name} />
         </span>
         <span>
-          <span className="text-muted-foreground">Kode Pos OSM: </span>
+          <span className="text-muted-foreground">Kode Pos: </span>
           <strong className={result.zipCodeMatch ? 'text-green-700' : 'text-red-600'}>
             {result.nominatimZipCode || '—'}
           </strong>
@@ -61,6 +81,7 @@ function ValidationDetail({ result }) {
               (lokal: {result.localZipCode})
             </span>
           )}
+          <SourceTag label={fs.zipCode} />
         </span>
         <span>
           <span className="text-muted-foreground">Tipe: </span>
@@ -68,14 +89,16 @@ function ValidationDetail({ result }) {
         </span>
         {result.nominatimCounty && (
           <span>
-            <span className="text-muted-foreground">Kab/Kota OSM: </span>
+            <span className="text-muted-foreground">Kab/Kota: </span>
             <strong>{result.nominatimCounty}</strong>
+            <SourceTag label={fs.county} />
           </span>
         )}
         {result.nominatimProvince && (
           <span>
-            <span className="text-muted-foreground">Provinsi OSM: </span>
+            <span className="text-muted-foreground">Provinsi: </span>
             <strong>{result.nominatimProvince}</strong>
+            <SourceTag label={fs.province} />
           </span>
         )}
         {result.lat && result.lon && (
@@ -90,13 +113,14 @@ function ValidationDetail({ result }) {
               <MapPin className="h-3 w-3" />
               {Number(result.lat).toFixed(4)}, {Number(result.lon).toFixed(4)}
             </a>
+            <SourceTag label={fs.coordinates} />
           </span>
         )}
       </div>
       <p className="text-muted-foreground italic">
         {result.nominatimDisplayName}
       </p>
-      <p className="text-muted-foreground">Sumber: {result.source}</p>
+      <p className="text-muted-foreground">Sumber utama: {result.source}</p>
     </div>
   );
 }
@@ -122,6 +146,7 @@ export default function WilayahInquiryPage() {
 
   // validation state: { [subDistrictId]: { loading, result, expanded } }
   const [validations, setValidations] = useState({});
+  const [showValidationInfo, setShowValidationInfo] = useState(false);
 
   const debounceRef = useRef(null);
 
@@ -151,6 +176,11 @@ export default function WilayahInquiryPage() {
       .catch(() => {});
   }, [selectedState]);
 
+  // Track whether user has started searching (to keep initial page empty)
+  const [searched, setSearched] = useState(false);
+
+  const hasAnyFilter = searchText.length >= 2 || !!zipCode || !!selectedProvince || !!selectedState || !!selectedDistrict;
+
   const doSearch = useCallback(async (currentPage = 0) => {
     setLoading(true);
     setValidations({});
@@ -168,6 +198,7 @@ export default function WilayahInquiryPage() {
       setResults(data.content);
       setTotal(data.totalElements);
       setPage(currentPage);
+      setSearched(true);
     } catch (err) {
       if (err.response?.status === 429) {
         toast.error('Rate limit exceeded — please wait a moment');
@@ -179,15 +210,21 @@ export default function WilayahInquiryPage() {
     }
   }, [searchText, zipCode, selectedProvince, selectedState, selectedDistrict]);
 
+  // Debounced text search — only fires when text ≥ 2 chars, or cleared while other filters active
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (searchText.length >= 2 || searchText.length === 0) {
+    if (searchText.length >= 2 || (searchText.length === 0 && hasAnyFilter)) {
       debounceRef.current = setTimeout(() => doSearch(0), 400);
     }
     return () => clearTimeout(debounceRef.current);
-  }, [searchText, doSearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText]);
 
-  useEffect(() => { doSearch(0); }, [zipCode, selectedProvince, selectedState, selectedDistrict]);
+  // Dropdown / zipCode filter changes — immediate search if any filter active
+  useEffect(() => {
+    if (hasAnyFilter) doSearch(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zipCode, selectedProvince, selectedState, selectedDistrict]);
 
   const handleValidate = async (sd) => {
     const id = sd.subDistrictId;
@@ -318,12 +355,35 @@ export default function WilayahInquiryPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Searching...' : `${total} hasil ditemukan${total >= PAGE_SIZE ? ' (max 50 per halaman)' : ''}`}
+            {loading ? 'Searching...' : !searched ? '' : `${total} hasil ditemukan${total >= PAGE_SIZE ? ' (max 50 per halaman)' : ''}`}
           </p>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <ShieldQuestion className="h-3.5 w-3.5" />
-            Cek Validasi menggunakan OpenStreetMap Nominatim
-          </p>
+          <div className="relative">
+            <button
+              onClick={() => setShowValidationInfo((v) => !v)}
+              className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Info className="h-3.5 w-3.5" />
+              <span>Tentang Validasi</span>
+              {showValidationInfo
+                ? <ChevronUp className="h-3 w-3" />
+                : <ChevronDown className="h-3 w-3" />}
+            </button>
+            {showValidationInfo && (
+              <>
+              <div className="fixed inset-0 z-[9]" onClick={() => setShowValidationInfo(false)} />
+              <div className="absolute right-0 top-full mt-1 z-10 w-72 rounded-lg border bg-card p-3 shadow-md text-xs space-y-1.5">
+                <p className="font-medium text-foreground">Sumber Validasi</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li><strong>Wikipedia Indonesia</strong> — pencarian utama via id.wikipedia.org (nama, kode pos, provinsi, kab/kota)</li>
+                  <li><strong>OpenStreetMap Nominatim</strong> — fallback untuk kode pos & koordinat jika Wikipedia tidak tersedia</li>
+                </ol>
+                <p className="text-muted-foreground">
+                  Kolom <em>Sumber</em> di detail hasil menunjukkan asal setiap field.
+                </p>
+              </div>
+              </>
+            )}
+          </div>
         </div>
 
         <Card>
@@ -336,7 +396,7 @@ export default function WilayahInquiryPage() {
                   <TableHead>Kab/Kota</TableHead>
                   <TableHead>Provinsi</TableHead>
                   <TableHead>Kode Pos</TableHead>
-                  <TableHead className="text-center">Validasi</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -346,18 +406,31 @@ export default function WilayahInquiryPage() {
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
+                ) : !searched ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Search className="h-8 w-8" />
+                        <p className="text-sm font-medium">Cari data wilayah</p>
+                        <p className="text-xs max-w-sm">
+                          Masukkan nama kelurahan/desa, kode pos, atau pilih provinsi/kab/kecamatan di atas untuk mulai pencarian.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : results.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                      Tidak ada data — gunakan filter di atas
+                      Tidak ada data ditemukan — coba ubah filter pencarian
                     </TableCell>
                   </TableRow>
                 ) : (
                   results.map((sd) => {
                     const vState = validations[sd.subDistrictId];
+                    const suspect = isSuspect(sd);
                     return [
                       // Main data row
-                      <TableRow key={sd.subDistrictId}>
+                      <TableRow key={sd.subDistrictId} className={suspect && !vState?.result ? 'bg-yellow-50/50' : ''}>
                         <TableCell className="font-medium">{sd.name}</TableCell>
                         <TableCell className="text-sm">{sd.districtName}</TableCell>
                         <TableCell className="text-sm">{sd.stateName}</TableCell>
@@ -380,16 +453,18 @@ export default function WilayahInquiryPage() {
                                 : <ChevronDown className="h-3 w-3 text-muted-foreground" />
                               }
                             </button>
-                          ) : (
+                          ) : suspect ? (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-7 text-xs"
+                              className="h-7 text-xs border-yellow-400 text-yellow-700 hover:bg-yellow-50"
                               onClick={() => handleValidate(sd)}
                             >
-                              <ShieldQuestion className="h-3.5 w-3.5 mr-1" />
-                              Cek Validasi
+                              <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                              Suspek
                             </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
                       </TableRow>,
@@ -402,7 +477,7 @@ export default function WilayahInquiryPage() {
                               <ValidationDetail result={vState.result} />
                             ) : (
                               <p className="text-xs text-red-600 py-1">
-                                Tidak ditemukan di OpenStreetMap untuk nama "{sd.name}".
+                                Tidak ditemukan di Wikipedia maupun OpenStreetMap untuk nama "{sd.name}".
                               </p>
                             )}
                           </TableCell>

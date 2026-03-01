@@ -40,6 +40,9 @@ public final class ErrorCode {
     public static final String BULK_UPLOAD_INVALID_STATUS = "BULK_002";
     public static final String BULK_UPLOAD_PARSE_ERROR = "BULK_003";
 
+    // Settings
+    public static final String SETTING_NOT_FOUND = "SET_001";
+
     // Rate Limit
     public static final String RATE_LIMIT_EXCEEDED = "SEC_001";
 

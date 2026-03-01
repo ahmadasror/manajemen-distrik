@@ -154,6 +154,46 @@ async function apiWilayahInquiry(request, token, params = {}) {
   return { status: res.status(), body: res.ok() ? await res.json() : null };
 }
 
+// ── Settings API helpers ──────────────────────────────────────────────────
+
+/**
+ * Get validation settings.
+ */
+async function apiGetValidationSettings(request, token) {
+  const res = await request.get(`${API_BASE}/settings/validation`, {
+    headers: { Authorization: `Bearer ${token}` },
+    ...SSL_OPTS,
+  });
+  if (!res.ok()) return null;
+  const body = await res.json();
+  return body.data;
+}
+
+/**
+ * Update validation settings.
+ * @param {object} updates — e.g. { 'validation.mode': 'paid', 'google.api.key': '...' }
+ */
+async function apiUpdateValidationSettings(request, token, updates) {
+  const res = await request.put(`${API_BASE}/settings/validation`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: updates,
+    ...SSL_OPTS,
+  });
+  return { status: res.status(), body: res.ok() ? (await res.json()).data : null };
+}
+
+/**
+ * Validate a wilayah name via the validation endpoint.
+ */
+async function apiValidateWilayah(request, token, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await request.get(`${API_BASE}/wilayah/validate?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    ...SSL_OPTS,
+  });
+  return { status: res.status(), body: res.ok() ? (await res.json()).data : null };
+}
+
 module.exports = {
   apiLogin,
   apiCreateUser,
@@ -164,4 +204,7 @@ module.exports = {
   apiCreateProvince,
   apiDeleteProvince,
   apiWilayahInquiry,
+  apiGetValidationSettings,
+  apiUpdateValidationSettings,
+  apiValidateWilayah,
 };
