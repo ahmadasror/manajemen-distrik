@@ -16,6 +16,7 @@ A full-stack **District Management Application** built with a **maker-checker ap
 | **Optimistic Locking** | Version-based conflict detection on concurrent updates |
 | **Role Management** | Admin can assign/remove roles per user via a dedicated Roles UI |
 | **Dashboard** | Live stats: total users, pending actions, recent audits |
+| **Master Data Wilayah** | 4-level Indonesia region hierarchy (Province → Kab/Kota → Kecamatan → Kel/Desa) with CRUD, bulk CSV upload, cascading inquiry, and Nominatim OSM validation |
 
 ---
 
@@ -38,7 +39,8 @@ A full-stack **District Management Application** built with a **maker-checker ap
 ### Infrastructure & Testing
 - **Docker Compose** — PostgreSQL
 - **Keycloak 26** — Identity Provider
-- **Playwright** — E2E test suite (52 cases across 6 modules)
+- **Playwright** — E2E test suite (77 cases across 8 modules)
+- **Bucket4j** — Token-bucket rate limiting (60 req/min per user on inquiry endpoint)
 - **Vitest** + **React Testing Library** — Frontend unit tests
 - **JUnit 5** + **Mockito** — Backend unit & integration tests
 
@@ -163,6 +165,97 @@ Click **"Sign in with Keycloak"** on the login page and use:
 |--------|---------------------------|------|-----------------|
 | GET    | `/api/v1/dashboard/stats` | any  | Dashboard stats |
 
+### Wilayah (Region Master Data)
+
+#### CRUD — Province / State / District / SubDistrict
+| Method | Endpoint                        | Auth         | Description           |
+|--------|---------------------------------|--------------|-----------------------|
+| GET    | `/api/v1/wilayah/provinces`     | any          | List/search provinces |
+| POST   | `/api/v1/wilayah/provinces`     | MAKER, ADMIN | Create province       |
+| PUT    | `/api/v1/wilayah/provinces/{id}`| MAKER, ADMIN | Update province       |
+| DELETE | `/api/v1/wilayah/provinces/{id}`| MAKER, ADMIN | Delete province       |
+
+Same pattern for `/states`, `/districts`, `/subdistricts`.
+CRUD is **direct** (no maker-checker approval) and is recorded in the audit trail.
+
+#### Inquiry
+| Method | Endpoint               | Auth | Description                                    |
+|--------|------------------------|------|------------------------------------------------|
+| GET    | `/api/v1/wilayah/inquiry` | any | Search subdistricts with cascading filters. Rate-limited to **60 req/min** per user. |
+
+Query params: `q` (name), `zipCode`, `provinceId`, `stateId`, `districtId`, `page` (max 50 results per page).
+
+#### Validation
+| Method | Endpoint                 | Auth | Description                         |
+|--------|--------------------------|------|-------------------------------------|
+| GET    | `/api/v1/wilayah/validate` | any | Validate a region name + zip code against OpenStreetMap Nominatim |
+
+Query params: `name` (required), `zipCode`, `provinceName`, `stateName`, `districtName`.
+
+#### Bulk Upload
+| Method | Endpoint                              | Auth         | Description                                      |
+|--------|---------------------------------------|--------------|--------------------------------------------------|
+| POST   | `/api/v1/bulk-uploads/wilayah`        | MAKER, ADMIN | Upload CSV → stages rows → creates pending action |
+| GET    | `/api/v1/bulk-uploads/{id}`           | any          | Get bulk upload status                           |
+| GET    | `/api/v1/bulk-uploads/{id}/rows`      | any          | Preview staged rows (paginated)                  |
+
+CSV format: `province_id,province_name,state_id,state_name,district_id,district_name,subdistrict_id,subdistrict_name,zip_code`
+
+---
+
+## Wilayah Validation Logic
+
+The `GET /api/v1/wilayah/validate` endpoint cross-references local data against **OpenStreetMap Nominatim** (no API key required, fair-use: 1 req/sec).
+
+### How it works
+
+1. **Build query** — concatenates `name + district + state + province + ", Indonesia"` into a search string.
+2. **Search** — calls `nominatim.openstreetmap.org/search` with `countrycodes=id`, `addressdetails=1`, `limit=3`.
+3. **Pick best match** — selects the result with the highest name similarity against the input name.
+4. **Get postcode** — calls `nominatim.openstreetmap.org/details?place_id=<id>` to retrieve `calculated_postcode` (separate call, 1.1 s sleep for fair-use compliance).
+5. **Score similarity** — computes **Levenshtein distance** similarity in [0.0, 1.0]:
+
+   ```
+   similarity = 1 − (levenshtein(name, nominatim_name) / max(len(name), len(nominatim_name)))
+   ```
+
+6. **Determine status** — using threshold **80%** for name and exact-match for zip:
+
+   | Condition | Status |
+   |-----------|--------|
+   | name ≥ 80% AND (no local zip OR zip matches) | `VALID` |
+   | name ≥ 80% BUT zip differs | `PARTIAL_ZIP` |
+   | name < 80% BUT zip matches | `PARTIAL_NAME` |
+   | neither condition met | `INVALID` |
+
+### Response fields
+
+```json
+{
+  "found": true,
+  "status": "VALID",
+  "nameSimilarity": 100,
+  "zipCodeMatch": false,
+  "nominatimName": "Abit",
+  "nominatimDisplayName": "Abit, Penajam Paser Utara, ...",
+  "nominatimType": "village",
+  "nominatimProvince": "Kalimantan Timur",
+  "nominatimCounty": "Penajam Paser Utara",
+  "nominatimZipCode": "92211",
+  "localZipCode": "70654",
+  "lat": -1.234,
+  "lon": 116.567,
+  "source": "OpenStreetMap Nominatim"
+}
+```
+
+### Frontend (Inquiry page)
+
+Each row on the **Inquiry Wilayah** page has a **"Cek Validasi"** button that:
+- Fetches the validation result inline (no page reload)
+- Displays a color-coded badge: **green** (`VALID`), **yellow** (`PARTIAL_ZIP` / `PARTIAL_NAME`), **red** (`INVALID`)
+- Clicking the badge expands a detail row showing name similarity %, zip comparison, Nominatim type, and a link to view the location on OpenStreetMap
+
 ---
 
 ## Running Tests
@@ -207,10 +300,13 @@ manajemen-distrik/
 │       ├── main/java/com/template/usermanagement/
 │       │   ├── audit/          # Audit trail module
 │       │   ├── common/         # ApiResponse, BaseEntity, exceptions, ErrorCode
-│       │   ├── config/         # SecurityConfig, WebMvcConfig, DashboardController
+│       │   ├── config/         # SecurityConfig, WebMvcConfig, RateLimitInterceptor
 │       │   ├── logging/        # Correlation ID & request/response logging filters
 │       │   ├── security/       # KeycloakJwtAuthenticationConverter, AuthController, UserDetailsImpl
 │       │   ├── user/           # User + Role CRUD (maker-checker)
+│       │   ├── wilayah/        # Region master data: entities, repos, service, controller, seeder
+│       │   │   ├── bulkupload/ # BulkUpload entity + BulkWilayahEntityApplier
+│       │   │   └── dto/        # ProvinceResponse, ValidationResult, WilayahRequest, …
 │       │   └── workflow/       # PendingAction engine (PendingActionService, EntityApplierRegistry)
 │       ├── main/resources/
 │       │   ├── application.yml         # Server config, Keycloak issuer-uri
@@ -220,15 +316,17 @@ manajemen-distrik/
 │           └── db/test-migration/      # Test-only Flyway migrations
 ├── frontend/
 │   └── src/
-│       ├── api/                # axiosInstance, authApi, userApi, pendingActionApi, rolesApi
+│       ├── api/                # axiosInstance, authApi, userApi, pendingActionApi, rolesApi, wilayahApi, bulkUploadApi
 │       ├── auth/               # keycloak.js singleton, AuthContext, ProtectedRoute
 │       ├── components/         # ConfirmModal, JsonDiffViewer, StatusBadge; ui/ (shadcn)
 │       ├── hooks/              # useApi, usePagination, usePermission
 │       ├── layouts/            # MainLayout (dark sidebar, responsive)
 │       ├── lib/                # cn() utility
 │       └── pages/              # Login, Dashboard, Users, Pending, Audit, Roles
+│           └── wilayah/        # WilayahPage (CRUD tabs), WilayahInquiryPage, BulkUploadPage
 ├── e2e/
-│   ├── tests/                  # 6 Playwright spec files (52 test cases)
+│   ├── tests/                  # 8 Playwright spec files (77 test cases)
+│   ├── fixtures/               # kodepos_e2e_subset.csv, kodepos_invalid_headers.csv
 │   ├── helpers/                # auth.js, api.js, .auth/
 │   └── global-setup.js         # Admin login + test-user seeding
 └── docker-compose.yml          # PostgreSQL 16 container
