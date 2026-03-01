@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LoginPage from './LoginPage';
 
@@ -13,11 +13,6 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return { ...actual, message: { error: vi.fn(), success: vi.fn() } };
-});
-
 import { useAuth } from '../auth/AuthContext';
 
 describe('LoginPage', () => {
@@ -25,33 +20,25 @@ describe('LoginPage', () => {
     vi.clearAllMocks();
   });
 
-  it('should render login form', () => {
-    useAuth.mockReturnValue({ user: null, login: vi.fn() });
+  it('should render login page with Keycloak sign-in button', () => {
+    useAuth.mockReturnValue({ user: null, loading: false, login: vi.fn() });
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
     expect(screen.getByText('User Management')).toBeInTheDocument();
-    expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-    expect(screen.getByText('Sign In')).toBeInTheDocument();
+    expect(screen.getByText('Sign in to continue to the District Management System')).toBeInTheDocument();
+    expect(screen.getByText('Sign In with Keycloak')).toBeInTheDocument();
   });
 
   it('should redirect to dashboard if user already logged in', () => {
-    useAuth.mockReturnValue({ user: { id: 1 }, login: vi.fn() });
+    useAuth.mockReturnValue({ user: { id: 1 }, loading: false, login: vi.fn() });
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true });
   });
 
-  it('should call login on form submit', async () => {
-    const loginMock = vi.fn().mockResolvedValue({});
-    useAuth.mockReturnValue({ user: null, login: loginMock });
+  it('should call login when Sign In with Keycloak is clicked', () => {
+    const loginMock = vi.fn();
+    useAuth.mockReturnValue({ user: null, loading: false, login: loginMock });
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
-
-    fireEvent.change(screen.getByPlaceholderText('Username'), { target: { value: 'admin' } });
-    fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pass123' } });
-    fireEvent.click(screen.getByText('Sign In'));
-
-    await waitFor(() => {
-      expect(loginMock).toHaveBeenCalledWith('admin', 'pass123');
-    });
+    fireEvent.click(screen.getByText('Sign In with Keycloak'));
+    expect(loginMock).toHaveBeenCalled();
   });
 });

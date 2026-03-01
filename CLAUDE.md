@@ -153,6 +153,19 @@ cd e2e && npx playwright test
 
 ---
 
+## Master Data Wilayah
+
+Lihat analisis lengkap di [`docs/kodepos-master-analysis.md`](docs/kodepos-master-analysis.md).
+
+Ringkasan singkat:
+- Source: `sample/kodepos_master.csv` — 60,227 baris, 4 level hierarki wilayah
+- **ProvinceID / StateID**: 4-digit custom numbering — bukan kode BPS, tidak ada concat antar keduanya
+- **DistrictID / SubDistrictID**: kode BPS — concat valid: `SubDistrictID[:7] == DistrictID`
+- ID dari CSV dipertahankan sebagai PK di sistem (jangan buat surrogate key baru)
+- Ada 87 baris anomali mismatch & 45 baris DistrictID 6-digit — import apa adanya, jangan di-block
+
+---
+
 ## Key Files
 
 | File | Purpose |

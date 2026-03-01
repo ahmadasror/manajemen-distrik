@@ -13,77 +13,71 @@ const STATE_PATH = {
 };
 
 /**
- * Log in via the UI login form.
- * Waits for redirect to /dashboard before returning.
+ * Log in via the UI.
+ * Clicks "Sign In with Keycloak" → fills credentials on Keycloak login page
+ * → waits for redirect to /dashboard.
  * @param {import('@playwright/test').Page} page
  * @param {string} username
  * @param {string} password
  */
 async function loginViaUI(page, username, password) {
   await page.goto('/login');
-  await page.getByPlaceholder('Username').fill(username);
-  await page.getByPlaceholder('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  await page.waitForURL('**/dashboard', { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Sign In with Keycloak' }).click();
+  // Wait for Keycloak login page to fully load before interacting
+  await page.waitForURL(/8180/, { waitUntil: 'load', timeout: 15_000 });
+  await page.locator('#username').waitFor({ state: 'visible' });
+  await page.locator('#username').fill(username);
+  await page.locator('#password').fill(password);
+  await page.locator('#kc-login').click();
+  await page.waitForURL('**/dashboard', { timeout: 15_000 });
 }
 
 /**
  * Log out via the header user menu.
- * Waits for redirect to /login before returning.
+ * Clicks the avatar/user button → clicks Logout.
  * @param {import('@playwright/test').Page} page
  */
 async function logoutViaUI(page) {
-  // Click the user avatar/name in the header to open dropdown
-  await page.locator('.ant-avatar, [class*="avatar"]').first().click();
+  // Click the user dropdown trigger button in the header
+  await page.locator('header button').click();
   await page.getByText('Logout').click();
-  await page.waitForURL('**/login', { timeout: 10_000 });
+  // Wait for redirect away from the app (Keycloak logout flow)
+  await page.waitForURL(/8180|\/login/, { timeout: 15_000 });
 }
 
 /**
- * Assert that an Ant Design success message is visible.
+ * Assert that a sonner success toast is visible.
  * @param {import('@playwright/test').Page} page
- * @param {string} [textContains]
+ * @param {string|RegExp} [textContains]
  */
 async function expectSuccessMessage(page, textContains) {
-  const msg = page.locator('.ant-message-success, [class*="ant-message-success"]').first();
+  const msg = page.locator('[data-sonner-toast][data-type="success"]').first();
   await expect(msg).toBeVisible({ timeout: 8_000 });
   if (textContains) await expect(msg).toContainText(textContains, { timeout: 8_000 });
 }
 
 /**
- * Assert that an Ant Design error message is visible.
+ * Assert that a sonner error toast is visible.
  * @param {import('@playwright/test').Page} page
- * @param {string} [textContains]
+ * @param {string|RegExp} [textContains]
  */
 async function expectErrorMessage(page, textContains) {
-  const msg = page.locator('.ant-message-error, [class*="ant-message-error"]').first();
+  const msg = page.locator('[data-sonner-toast][data-type="error"]').first();
   await expect(msg).toBeVisible({ timeout: 8_000 });
   if (textContains) await expect(msg).toContainText(textContains, { timeout: 8_000 });
 }
 
 /**
- * Fill an Ant Design Select component identified by its form label.
+ * Select roles in the UserFormPage by clicking the role toggle buttons.
  * @param {import('@playwright/test').Page} page
- * @param {string} label       — The label text of the Form.Item
- * @param {string|string[]} values — One or more option texts to select
+ * @param {string} label       — ignored (kept for API compatibility)
+ * @param {string|string[]} values — One or more role names to click (e.g. 'MAKER', ['ADMIN','VIEWER'])
  */
 async function fillAntSelect(page, label, values) {
   const items = Array.isArray(values) ? values : [values];
-  // Find the Select by the label above it, then click the selector div
-  const formItem = page
-    .locator('.ant-form-item')
-    .filter({ has: page.locator(`label:has-text("${label}")`) });
-  // AntD 6.x uses .ant-select-content instead of .ant-select-selector
-  await formItem.locator('.ant-select-content').click();
-  await page.locator('.ant-select-dropdown').waitFor({ state: 'visible' });
   for (const val of items) {
-    await page
-      .locator('.ant-select-item-option')
-      .filter({ hasText: val })
-      .click();
+    await page.getByRole('button', { name: val, exact: true }).click();
   }
-  // Close the dropdown
-  await page.keyboard.press('Escape');
 }
 
 module.exports = { STATE_PATH, loginViaUI, logoutViaUI, expectSuccessMessage, expectErrorMessage, fillAntSelect };

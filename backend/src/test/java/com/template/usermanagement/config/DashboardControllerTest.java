@@ -2,8 +2,7 @@ package com.template.usermanagement.config;
 
 import com.template.usermanagement.TestFixtures;
 import com.template.usermanagement.audit.AuditTrailService;
-import com.template.usermanagement.security.JwtAuthenticationFilter;
-import com.template.usermanagement.security.JwtTokenProvider;
+import com.template.usermanagement.security.KeycloakJwtAuthenticationConverter;
 import com.template.usermanagement.security.UserDetailsImpl;
 import com.template.usermanagement.security.UserDetailsServiceImpl;
 import com.template.usermanagement.user.User;
@@ -40,13 +39,13 @@ class DashboardControllerTest {
     private AuditTrailService auditTrailService;
 
     @MockBean
-    private JwtTokenProvider jwtTokenProvider;
+    private org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder;
+
+    @MockBean
+    private KeycloakJwtAuthenticationConverter keycloakJwtAuthenticationConverter;
 
     @MockBean
     private UserDetailsServiceImpl userDetailsService;
-
-    @MockBean
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @AfterEach
     void cleanup() {

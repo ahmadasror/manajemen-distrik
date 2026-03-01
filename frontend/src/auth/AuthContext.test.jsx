@@ -2,14 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from './AuthContext';
 
-vi.mock('../api/authApi', () => ({
-  authApi: {
+vi.mock('./keycloak', () => ({
+  default: {
+    authenticated: false,
+    init: vi.fn().mockResolvedValue(undefined),
     login: vi.fn(),
     logout: vi.fn(),
+    updateToken: vi.fn(),
+  },
+}));
+
+vi.mock('../api/authApi', () => ({
+  authApi: {
     me: vi.fn(),
   },
 }));
 
+import keycloak from './keycloak';
 import { authApi } from '../api/authApi';
 
 function wrapper({ children }) {
@@ -19,7 +28,8 @@ function wrapper({ children }) {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
+    keycloak.authenticated = false;
+    keycloak.init.mockResolvedValue(undefined);
   });
 
   it('useAuth outside provider should throw', () => {
@@ -28,8 +38,8 @@ describe('AuthContext', () => {
     }).toThrow('useAuth must be used within AuthProvider');
   });
 
-  it('fetchUser with no token should set loading to false and user to null', async () => {
-    authApi.me.mockResolvedValue({ data: { data: null } });
+  it('should set loading to false and user to null when keycloak is not authenticated', async () => {
+    keycloak.authenticated = false;
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => {
@@ -39,8 +49,8 @@ describe('AuthContext', () => {
     expect(authApi.me).not.toHaveBeenCalled();
   });
 
-  it('fetchUser with token should call me endpoint', async () => {
-    localStorage.setItem('accessToken', 'test-token');
+  it('should call me endpoint and set user when keycloak is authenticated', async () => {
+    keycloak.authenticated = true;
     authApi.me.mockResolvedValue({
       data: { data: { id: 1, username: 'admin', roles: ['ADMIN'] } },
     });
@@ -54,117 +64,49 @@ describe('AuthContext', () => {
     expect(authApi.me).toHaveBeenCalled();
   });
 
-  it('fetchUser with invalid token should clear tokens', async () => {
-    localStorage.setItem('accessToken', 'bad-token');
-    authApi.me.mockRejectedValue(new Error('Unauthorized'));
-
+  it('login should call keycloak.login', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
+    act(() => {
+      result.current.login();
     });
-    expect(result.current.user).toBeNull();
-    expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(localStorage.getItem('refreshToken')).toBeNull();
+
+    expect(keycloak.login).toHaveBeenCalled();
   });
 
-  it('login should store tokens and set user', async () => {
-    authApi.me.mockRejectedValue(new Error('no token'));
+  it('logout should call keycloak.logout', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
+    act(() => {
+      result.current.logout();
     });
 
-    authApi.login.mockResolvedValue({
-      data: {
-        data: {
-          accessToken: 'access123',
-          refreshToken: 'refresh123',
-          user: { id: 1, username: 'admin', roles: ['ADMIN'] },
-        },
-      },
-    });
-
-    await act(async () => {
-      await result.current.login('admin', 'password');
-    });
-
-    expect(localStorage.getItem('accessToken')).toBe('access123');
-    expect(localStorage.getItem('refreshToken')).toBe('refresh123');
-    expect(result.current.user).toEqual({ id: 1, username: 'admin', roles: ['ADMIN'] });
-  });
-
-  it('logout should clear tokens and user', async () => {
-    localStorage.setItem('accessToken', 'test-token');
-    authApi.me.mockResolvedValue({
-      data: { data: { id: 1, username: 'admin', roles: ['ADMIN'] } },
-    });
-    authApi.logout.mockResolvedValue({});
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.user).toBeTruthy();
-    });
-
-    await act(async () => {
-      await result.current.logout();
-    });
-
-    expect(result.current.user).toBeNull();
-    expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(localStorage.getItem('refreshToken')).toBeNull();
-  });
-
-  it('logout should clear tokens even if API call fails', async () => {
-    localStorage.setItem('accessToken', 'test-token');
-    authApi.me.mockResolvedValue({
-      data: { data: { id: 1, username: 'admin', roles: ['ADMIN'] } },
-    });
-    authApi.logout.mockRejectedValue(new Error('Network error'));
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.user).toBeTruthy();
-    });
-
-    await act(async () => {
-      await result.current.logout();
-    });
-
-    expect(result.current.user).toBeNull();
-    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(keycloak.logout).toHaveBeenCalled();
   });
 
   it('hasRole should return true if user has role', async () => {
-    localStorage.setItem('accessToken', 'test-token');
+    keycloak.authenticated = true;
     authApi.me.mockResolvedValue({
       data: { data: { id: 1, username: 'admin', roles: ['ADMIN', 'MAKER'] } },
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.user).toBeTruthy();
-    });
+    await waitFor(() => expect(result.current.user).toBeTruthy());
 
     expect(result.current.hasRole('ADMIN')).toBe(true);
     expect(result.current.hasRole('VIEWER')).toBe(false);
   });
 
   it('hasAnyRole should return true if user has any specified role', async () => {
-    localStorage.setItem('accessToken', 'test-token');
+    keycloak.authenticated = true;
     authApi.me.mockResolvedValue({
       data: { data: { id: 1, username: 'admin', roles: ['CHECKER'] } },
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.user).toBeTruthy();
-    });
+    await waitFor(() => expect(result.current.user).toBeTruthy());
 
     expect(result.current.hasAnyRole('ADMIN', 'CHECKER')).toBe(true);
     expect(result.current.hasAnyRole('ADMIN', 'MAKER')).toBe(false);

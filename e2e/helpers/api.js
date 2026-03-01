@@ -4,23 +4,31 @@
  */
 
 const API_BASE = 'https://localhost:8090/api/v1';
+const KEYCLOAK_TOKEN_URL =
+  'http://localhost:8180/realms/manajemen-distrik/protocol/openid-connect/token';
 const SSL_OPTS = { ignoreHTTPSErrors: true };
 
 /**
- * Login via API and return the access token.
+ * Login via Keycloak token endpoint and return the access token.
  * @param {import('@playwright/test').APIRequestContext} request
  * @param {string} username
  * @param {string} password
  * @returns {Promise<string>} accessToken
  */
 async function apiLogin(request, username, password) {
-  const res = await request.post(`${API_BASE}/auth/login`, {
-    data: { username, password },
+  const res = await request.post(KEYCLOAK_TOKEN_URL, {
+    form: {
+      grant_type: 'password',
+      client_id: 'manajemen-distrik-app',
+      username,
+      password,
+    },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     ...SSL_OPTS,
   });
-  if (!res.ok()) throw new Error(`Login failed: ${res.status()} ${await res.text()}`);
+  if (!res.ok()) throw new Error(`Keycloak login failed: ${res.status()} ${await res.text()}`);
   const body = await res.json();
-  return body.data?.accessToken ?? body.accessToken;
+  return body.access_token;
 }
 
 /**
@@ -93,4 +101,67 @@ async function apiCancelPending(request, token, pendingId) {
   return res.ok();
 }
 
-module.exports = { apiLogin, apiCreateUser, apiApprovePending, apiGetPendingActions, apiCancelPending };
+// ── Wilayah API helpers ────────────────────────────────────────────────────
+
+/**
+ * Get provinces list.
+ */
+async function apiGetProvinces(request, token, params = {}) {
+  const qs = new URLSearchParams({ size: 100, ...params }).toString();
+  const res = await request.get(`${API_BASE}/wilayah/provinces?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    ...SSL_OPTS,
+  });
+  if (!res.ok()) return [];
+  const body = await res.json();
+  return body.data?.content ?? [];
+}
+
+/**
+ * Create a province directly (no pending action) and return the response data.
+ */
+async function apiCreateProvince(request, token, data) {
+  const res = await request.post(`${API_BASE}/wilayah/provinces`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+    ...SSL_OPTS,
+  });
+  if (!res.ok()) throw new Error(`Create province failed: ${res.status()} ${await res.text()}`);
+  const body = await res.json();
+  return body.data;
+}
+
+/**
+ * Delete a province by ID.
+ */
+async function apiDeleteProvince(request, token, id) {
+  const res = await request.delete(`${API_BASE}/wilayah/provinces/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    ...SSL_OPTS,
+  });
+  return res.ok();
+}
+
+/**
+ * Wilayah inquiry — returns { status, body }.
+ */
+async function apiWilayahInquiry(request, token, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await request.get(`${API_BASE}/wilayah/inquiry?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    ...SSL_OPTS,
+  });
+  return { status: res.status(), body: res.ok() ? await res.json() : null };
+}
+
+module.exports = {
+  apiLogin,
+  apiCreateUser,
+  apiApprovePending,
+  apiGetPendingActions,
+  apiCancelPending,
+  apiGetProvinces,
+  apiCreateProvince,
+  apiDeleteProvince,
+  apiWilayahInquiry,
+};

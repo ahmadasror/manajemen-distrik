@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
@@ -6,21 +6,25 @@ vi.mock('./AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock('antd', async () => {
-  const actual = await vi.importActual('antd');
-  return {
-    ...actual,
-    Spin: ({ children, ...props }) => <div data-testid="loading-spin" {...props}>{children}</div>,
-  };
-});
+vi.mock('./keycloak', () => ({
+  default: {
+    authenticated: false,
+    login: vi.fn(),
+  },
+}));
 
 import { useAuth } from './AuthContext';
+import keycloak from './keycloak';
 import ProtectedRoute from './ProtectedRoute';
 
 describe('ProtectedRoute', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should show spinner when loading', () => {
     useAuth.mockReturnValue({ user: null, loading: true });
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={['/protected']}>
         <Routes>
           <Route path="/protected" element={
@@ -31,11 +35,11 @@ describe('ProtectedRoute', () => {
         </Routes>
       </MemoryRouter>
     );
-    expect(screen.getByTestId('loading-spin')).toBeInTheDocument();
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
   });
 
-  it('should redirect to login when not authenticated', () => {
+  it('should call keycloak.login when not authenticated', () => {
     useAuth.mockReturnValue({ user: null, loading: false });
     render(
       <MemoryRouter initialEntries={['/protected']}>
@@ -45,12 +49,11 @@ describe('ProtectedRoute', () => {
               <div>Protected Content</div>
             </ProtectedRoute>
           } />
-          <Route path="/login" element={<div>Login Page</div>} />
         </Routes>
       </MemoryRouter>
     );
+    expect(keycloak.login).toHaveBeenCalled();
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
-    expect(screen.getByText('Login Page')).toBeInTheDocument();
   });
 
   it('should render children when authenticated', () => {

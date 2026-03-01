@@ -120,7 +120,7 @@ export default function UserFormPage() {
           <CardTitle>{isEdit ? 'Edit User' : 'Create New User'}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             {!isEdit && (
               <div className="space-y-1.5">
                 <Label htmlFor="username">Username</Label>

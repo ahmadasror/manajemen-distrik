@@ -14,20 +14,19 @@ const ADMIN_STATE = path.join(__dirname, '../helpers/.auth/admin.json');
 
 test.describe('5. Dashboard — Positive', () => {
   test('5.1 Administrator views dashboard statistics', async ({ page }) => {
-    // Use saved admin state so we don't log in each test
+    // Login via Keycloak
     await page.goto('/login');
-    await page.getByPlaceholder('Username').fill('admin');
-    await page.getByPlaceholder('Password').fill('admin123');
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await page.waitForURL('**/dashboard');
+    await page.getByRole('button', { name: 'Sign In with Keycloak' }).click();
+    await page.waitForURL(/8180/, { waitUntil: 'load', timeout: 15_000 });
+    await page.locator('#username').waitFor({ state: 'visible' });
+    await page.locator('#username').fill('admin');
+    await page.locator('#password').fill('admin123');
+    await page.locator('#kc-login').click();
+    await page.waitForURL('**/dashboard', { timeout: 15_000 });
 
-    // Four stat cards must be visible
-    const statCards = page.locator('.ant-statistic, [class*="statistic"], .ant-card');
-    await expect(statCards.first()).toBeVisible({ timeout: 8_000 });
-
-    // The dashboard should show at least these four labels (scope to main to avoid sidebar matches)
-    const main = page.locator('main, [role="main"], .ant-layout-content').first();
-    await expect(main.getByText(/total users/i)).toBeVisible();
+    // The dashboard should show at least these four stat card labels
+    const main = page.locator('main').first();
+    await expect(main.getByText(/total users/i)).toBeVisible({ timeout: 8_000 });
     await expect(main.getByText(/active users/i)).toBeVisible();
     await expect(main.getByText(/pending actions/i)).toBeVisible();
     await expect(main.getByText(/audit/i).first()).toBeVisible();
@@ -42,8 +41,9 @@ test.describe('5. Dashboard — Positive', () => {
     await loginViaUI(page, creds.viewer.username, creds.viewer.password);
     await expect(page).toHaveURL(/\/dashboard/);
 
-    // Statistics cards must render for a Viewer too
-    await expect(page.locator('.ant-statistic, .ant-card').first()).toBeVisible({ timeout: 8_000 });
+    // Statistics must render for a Viewer too
+    const main = page.locator('main').first();
+    await expect(main.getByText(/total users/i)).toBeVisible({ timeout: 8_000 });
   });
 });
 
@@ -52,6 +52,7 @@ test.describe('5. Dashboard — Positive', () => {
 test.describe('5. Dashboard — Negative', () => {
   test('5.3 User accesses dashboard without logging in', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page).toHaveURL(/\/login/, { timeout: 8_000 });
+    // ProtectedRoute calls keycloak.login() → redirect to Keycloak
+    await expect(page).toHaveURL(/8180/, { timeout: 10_000 });
   });
 });

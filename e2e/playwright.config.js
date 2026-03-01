@@ -32,11 +32,6 @@ module.exports = defineConfig({
     /* Accept self-signed mkcert certificates */
     ignoreHTTPSErrors: true,
 
-    /* Backend API base URL (used in helpers) */
-    extraHTTPHeaders: {
-      'Content-Type': 'application/json',
-    },
-
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'off',
@@ -45,7 +40,15 @@ module.exports = defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--allow-running-insecure-content',
+            '--disable-features=IsolateOrigins,site-per-process',
+          ],
+        },
+      },
     },
   ],
 });

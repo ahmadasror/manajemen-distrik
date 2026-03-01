@@ -14,6 +14,9 @@ import AuditListPage from './pages/audit/AuditListPage';
 import AuditDetailPage from './pages/audit/AuditDetailPage';
 import RoleListPage from './pages/roles/RoleListPage';
 import RoleDetailPage from './pages/roles/RoleDetailPage';
+import WilayahPage from './pages/wilayah/WilayahPage';
+import WilayahInquiryPage from './pages/wilayah/WilayahInquiryPage';
+import BulkUploadPage from './pages/wilayah/BulkUploadPage';
 
 export default function App() {
   return (
@@ -34,6 +37,9 @@ export default function App() {
             <Route path="audit-trail/:id" element={<AuditDetailPage />} />
             <Route path="roles" element={<ProtectedRoute roles={['ADMIN']}><RoleListPage /></ProtectedRoute>} />
             <Route path="roles/:id" element={<ProtectedRoute roles={['ADMIN']}><RoleDetailPage /></ProtectedRoute>} />
+            <Route path="wilayah" element={<WilayahPage />} />
+            <Route path="wilayah/inquiry" element={<WilayahInquiryPage />} />
+            <Route path="wilayah/bulk-upload" element={<ProtectedRoute roles={['ADMIN', 'MAKER']}><BulkUploadPage /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

@@ -28,6 +28,21 @@ public final class ErrorCode {
     public static final String ROLE_NOT_FOUND = "ROLE_001";
     public static final String USER_NOT_IN_ROLE = "ROLE_002";
 
+    // Wilayah
+    public static final String WILAYAH_PROVINCE_NOT_FOUND = "WIL_001";
+    public static final String WILAYAH_STATE_NOT_FOUND = "WIL_002";
+    public static final String WILAYAH_DISTRICT_NOT_FOUND = "WIL_003";
+    public static final String WILAYAH_SUBDISTRICT_NOT_FOUND = "WIL_004";
+    public static final String WILAYAH_DUPLICATE_NAME = "WIL_005";
+
+    // Bulk Upload
+    public static final String BULK_UPLOAD_NOT_FOUND = "BULK_001";
+    public static final String BULK_UPLOAD_INVALID_STATUS = "BULK_002";
+    public static final String BULK_UPLOAD_PARSE_ERROR = "BULK_003";
+
+    // Rate Limit
+    public static final String RATE_LIMIT_EXCEEDED = "SEC_001";
+
     // General
     public static final String VALIDATION_ERROR = "GEN_001";
     public static final String INTERNAL_ERROR = "GEN_002";

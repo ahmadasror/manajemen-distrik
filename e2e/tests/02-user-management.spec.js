@@ -5,7 +5,7 @@
 
 const { test, expect } = require('@playwright/test');
 const path = require('path');
-const { loginViaUI, expectSuccessMessage, expectErrorMessage, fillAntSelect } = require('../helpers/auth');
+const { loginViaUI, logoutViaUI, expectSuccessMessage, expectErrorMessage, fillAntSelect } = require('../helpers/auth');
 const { apiLogin, apiGetPendingActions, apiCancelPending } = require('../helpers/api');
 
 const ADMIN_STATE = path.join(__dirname, '../helpers/.auth/admin.json');
@@ -14,7 +14,7 @@ const ADMIN_STATE = path.join(__dirname, '../helpers/.auth/admin.json');
 async function fillUserForm(page, { username, email, password, fullName, phone, role }) {
   if (username !== undefined) {
     const usernameInput = page.getByPlaceholder('Enter username');
-    // Wait for the field to appear (isVisible() is immediate and can miss it on initial render)
+    // Wait for the field to appear
     const visible = await usernameInput.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false);
     if (visible) await usernameInput.fill(username);
   }
@@ -28,13 +28,15 @@ async function fillUserForm(page, { username, email, password, fullName, phone, 
 // ── Positive Cases ────────────────────────────────────────────────────────
 
 test.describe('2. User Management — Positive', () => {
-  test.use({ storageState: ADMIN_STATE });
+  test.beforeEach(async ({ page }) => {
+    await loginViaUI(page, 'admin', 'admin123');
+  });
 
   test('2.1 Administrator views the list of all users', async ({ page }) => {
     await page.goto('/users');
 
     // Table must render with column headers
-    await expect(page.locator('.ant-table')).toBeVisible();
+    await expect(page.locator('table')).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /username/i })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /email/i })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /roles/i })).toBeVisible();
@@ -48,14 +50,14 @@ test.describe('2. User Management — Positive', () => {
     await page.goto('/users');
 
     // Click the eye (view) icon on the first row
-    await page.locator('.ant-table-tbody tr').first().getByRole('button').first().click();
+    await page.locator('tbody tr').first().getByRole('button').first().click();
 
     await expect(page).toHaveURL(/\/users\/\d+/);
-    // Descriptions component shows the key fields
+    // Description fields show the key fields
     await expect(page.getByText('Username')).toBeVisible();
     await expect(page.getByText('Full Name')).toBeVisible();
     await expect(page.getByText('Email')).toBeVisible();
-    await expect(page.getByText(/Active|Inactive/)).toBeVisible();
+    await expect(page.getByText(/Active|Inactive/).first()).toBeVisible();
   });
 
   test('2.3 Maker submits a new user creation request', async ({ page }) => {
@@ -90,8 +92,8 @@ test.describe('2. User Management — Positive', () => {
 
     await page.goto('/users');
 
-    // Click the edit button on the first row
-    const editBtn = page.locator('.ant-table-tbody tr').first().locator('[aria-label*="edit"], button').nth(1);
+    // Click the edit button on the first row (second button)
+    const editBtn = page.locator('tbody tr').first().getByRole('button').nth(1);
     await editBtn.click();
     await expect(page).toHaveURL(/\/users\/\d+\/edit/);
 
@@ -118,15 +120,9 @@ test.describe('2. User Management — Positive', () => {
 
     await page.goto('/users');
 
-    // Click the delete (danger) button on the first row
-    const deleteBtn = page.locator('.ant-table-tbody tr').first().locator('button[class*="danger"], button').last();
+    // Click the delete (last) button on the first row
+    const deleteBtn = page.locator('tbody tr').first().getByRole('button').last();
     await deleteBtn.click();
-
-    // Ant Design Popconfirm — confirm the action if present (may not exist depending on component)
-    const confirmBtn = page.getByRole('button', { name: /ok|yes|confirm/i }).last();
-    if (await confirmBtn.isVisible({ timeout: 500 })) {
-      await confirmBtn.click();
-    }
 
     await expectSuccessMessage(page, /submitted.*approval|approval/i);
   });
@@ -135,7 +131,9 @@ test.describe('2. User Management — Positive', () => {
 // ── Negative Cases ────────────────────────────────────────────────────────
 
 test.describe('2. User Management — Negative', () => {
-  test.use({ storageState: ADMIN_STATE });
+  test.beforeEach(async ({ page }) => {
+    await loginViaUI(page, 'admin', 'admin123');
+  });
 
   test('2.6 Maker creates user with duplicate username', async ({ page }) => {
     await page.goto('/users/new');
@@ -179,8 +177,8 @@ test.describe('2. User Management — Negative', () => {
     // Submit with all fields empty
     await page.getByRole('button', { name: /Submit Create/i }).click();
 
-    // Ant Design shows inline validation errors on each required field
-    const validationErrors = page.locator('.ant-form-item-explain-error');
+    // Validation errors appear on required fields
+    const validationErrors = page.locator('p.text-destructive');
     await expect(validationErrors.first()).toBeVisible({ timeout: 5_000 });
     const count = await validationErrors.count();
     expect(count).toBeGreaterThanOrEqual(3); // username, email, password, fullName at minimum
@@ -200,7 +198,7 @@ test.describe('2. User Management — Negative', () => {
     await page.getByRole('button', { name: /Submit Create/i }).click();
 
     // Expect email validation error
-    const emailError = page.locator('.ant-form-item-explain-error').filter({ hasText: /email|valid/i });
+    const emailError = page.locator('p.text-destructive').filter({ hasText: /email|valid/i });
     await expect(emailError).toBeVisible({ timeout: 5_000 });
   });
 
@@ -218,22 +216,22 @@ test.describe('2. User Management — Negative', () => {
     await page.getByRole('button', { name: /Submit Create/i }).click();
 
     // Expect password validation error
-    const passError = page.locator('.ant-form-item-explain-error').filter({ hasText: /password|min|character/i });
+    const passError = page.locator('p.text-destructive').filter({ hasText: /password|min|character/i });
     await expect(passError).toBeVisible({ timeout: 5_000 });
   });
 
   test('2.11 User searches for a non-existent user', async ({ page }) => {
     await page.goto('/users');
-    await expect(page.locator('.ant-table')).toBeVisible();
+    await expect(page.locator('table')).toBeVisible();
 
     // Type a search term that matches nothing
     const searchBox = page.getByPlaceholder('Search users...');
     await searchBox.fill('zzznonexistentuser999');
     await page.waitForTimeout(600); // debounce
 
-    // Table shows "No data" or empty state
-    const emptyState = page.locator('.ant-empty, .ant-table-placeholder');
-    await expect(emptyState.first()).toBeVisible({ timeout: 8_000 });
+    // Table shows "No users found" empty state
+    const emptyState = page.getByText('No users found');
+    await expect(emptyState).toBeVisible({ timeout: 8_000 });
   });
 
   test('2.12 Viewer attempts to create a new user', async ({ page, request }) => {
@@ -243,6 +241,8 @@ test.describe('2. User Management — Negative', () => {
     const creds = JSON.parse(fs.readFileSync(credsFile, 'utf8'));
     if (!creds.viewer) test.skip(true, 'Viewer user not available — approve via a second admin first');
 
+    // Logout from admin (set by beforeEach) then login as viewer
+    await logoutViaUI(page);
     await loginViaUI(page, creds.viewer.username, creds.viewer.password);
     await page.goto('/users/new');
 

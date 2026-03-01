@@ -34,18 +34,18 @@ describe('ConfirmModal', () => {
 
   it('should show remarks textarea when showRemarks is true', () => {
     render(<ConfirmModal {...defaultProps} showRemarks={true} />);
-    expect(screen.getByPlaceholderText('Enter remarks (optional)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter remarks...')).toBeInTheDocument();
   });
 
   it('should not show remarks textarea when showRemarks is false', () => {
     render(<ConfirmModal {...defaultProps} showRemarks={false} />);
-    expect(screen.queryByPlaceholderText('Enter remarks (optional)')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Enter remarks...')).not.toBeInTheDocument();
   });
 
   it('should call onConfirm with remarks text when showRemarks is true', () => {
     const onConfirm = vi.fn();
     render(<ConfirmModal {...defaultProps} onConfirm={onConfirm} showRemarks={true} />);
-    fireEvent.change(screen.getByPlaceholderText('Enter remarks (optional)'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter remarks...'), {
       target: { value: 'My remark' },
     });
     fireEvent.click(screen.getByText('Confirm'));

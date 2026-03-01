@@ -11,6 +11,9 @@ import {
   X,
   ChevronRight,
   User,
+  Map,
+  Search,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { usePermission } from '../hooks/usePermission';
@@ -59,14 +62,17 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { isAdmin } = usePermission();
+  const { isAdmin, canCreate } = usePermission();
 
   const allNavItems = [
     ...navItems,
     ...(isAdmin ? [{ path: '/roles', icon: ShieldCheck, label: 'Roles' }] : []),
+    { path: '/wilayah', icon: Map, label: 'Data Wilayah' },
+    { path: '/wilayah/inquiry', icon: Search, label: 'Inquiry Wilayah' },
+    ...((isAdmin || canCreate) ? [{ path: '/wilayah/bulk-upload', icon: Upload, label: 'Bulk Upload' }] : []),
   ];
 
-  const activeBase = '/' + location.pathname.split('/')[1];
+  const activeBase = location.pathname;
 
   const initials = user?.fullName
     ? user.fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -87,10 +93,10 @@ export default function MainLayout() {
           collapsed ? 'justify-center' : 'gap-2'
         )}>
           <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary shrink-0">
-            <ShieldCheck className="h-5 w-5 text-white" />
+            <Map className="h-5 w-5 text-white" />
           </div>
           {!collapsed && (
-            <span className="font-semibold text-base tracking-tight">User Mgmt</span>
+            <span className="font-semibold text-base tracking-tight">Manajemen Distrik</span>
           )}
         </div>
 
@@ -100,7 +106,7 @@ export default function MainLayout() {
             <NavItem
               key={item.path}
               item={item}
-              isActive={activeBase === item.path}
+              isActive={activeBase === item.path || (item.path !== '/' && activeBase.startsWith(item.path + '/') && !allNavItems.some((other) => other !== item && activeBase.startsWith(other.path) && other.path.length > item.path.length))}
               collapsed={collapsed}
               onClick={() => navigate(item.path)}
             />
@@ -128,7 +134,7 @@ export default function MainLayout() {
         <header className="flex items-center justify-between h-16 px-6 border-b bg-background shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold text-foreground">
-              {allNavItems.find((i) => i.path === activeBase)?.label || 'Dashboard'}
+              {allNavItems.slice().sort((a, b) => b.path.length - a.path.length).find((i) => activeBase === i.path || activeBase.startsWith(i.path + '/'))?.label || 'Dashboard'}
             </h1>
           </div>
 

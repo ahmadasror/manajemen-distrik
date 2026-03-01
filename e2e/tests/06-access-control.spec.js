@@ -33,7 +33,7 @@ test.describe('6. Access Control — Positive', () => {
     await expect(page.getByRole('button', { name: /Add User/i })).toBeVisible();
 
     // Row action buttons (view, edit, delete) must be present
-    const firstRow = page.locator('.ant-table-tbody tr').first();
+    const firstRow = page.locator('tbody tr').first();
     await expect(firstRow).toBeVisible({ timeout: 8_000 });
     const actionButtons = firstRow.locator('button');
     const btnCount = await actionButtons.count();
@@ -50,9 +50,9 @@ test.describe('6. Access Control — Positive', () => {
     // Add User button must be visible for MAKER
     await expect(page.getByRole('button', { name: /Add User/i })).toBeVisible({ timeout: 5_000 });
 
-    // MAKER cannot navigate to /pending-actions to approve — no approve button there
+    // MAKER cannot approve pending actions — no approve button on list page
     await page.goto('/pending-actions');
-    await expect(page.locator('.ant-table')).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator('table')).toBeVisible({ timeout: 8_000 });
 
     // Approve button must not appear anywhere on the list page
     await expect(page.getByRole('button', { name: /Approve/i })).not.toBeVisible();
@@ -65,7 +65,7 @@ test.describe('6. Access Control — Positive', () => {
     await loginViaUI(page, creds.checker.username, creds.checker.password);
     await page.goto('/pending-actions');
 
-    const rows = page.locator('.ant-table-tbody tr');
+    const rows = page.locator('tbody tr');
     const count = await rows.count();
     if (count === 0) test.skip(true, 'No pending actions to verify');
 
@@ -73,8 +73,8 @@ test.describe('6. Access Control — Positive', () => {
     await rows.first().locator('button, a').first().click();
     await expect(page).toHaveURL(/\/pending-actions\/\d+/);
 
-    // If status is PENDING, Approve and Reject buttons should be visible
-    const isPending = await page.locator('.ant-tag').filter({ hasText: /PENDING/i }).isVisible({ timeout: 3_000 }).catch(() => false);
+    // If status is Pending, Approve and Reject buttons should be visible
+    const isPending = await page.getByText('Pending').first().isVisible({ timeout: 3_000 }).catch(() => false);
     if (isPending) {
       await expect(page.getByRole('button', { name: /Approve/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /Reject/i })).toBeVisible();
@@ -94,11 +94,12 @@ test.describe('6. Access Control — Positive', () => {
 
     // User list is accessible
     await page.goto('/users');
-    await expect(page.locator('.ant-table')).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator('table')).toBeVisible({ timeout: 8_000 });
 
     // Dashboard is accessible
     await page.goto('/dashboard');
-    await expect(page.locator('.ant-statistic, .ant-card').first()).toBeVisible({ timeout: 8_000 });
+    const main = page.locator('main').first();
+    await expect(main.getByText(/total users/i)).toBeVisible({ timeout: 8_000 });
 
     // Create button must NOT be visible
     await page.goto('/users');

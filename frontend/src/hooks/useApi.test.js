@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useApi } from './useApi';
 
-// Mock antd message
-vi.mock('antd', () => ({
-  message: {
+vi.mock('sonner', () => ({
+  toast: {
     error: vi.fn(),
     success: vi.fn(),
-    warning: vi.fn(),
   },
 }));
 
-import { message } from 'antd';
+import { toast } from 'sonner';
 
 describe('useApi', () => {
   beforeEach(() => {
@@ -42,7 +40,7 @@ describe('useApi', () => {
     expect(mockFn).toHaveBeenCalledWith('arg1');
   });
 
-  it('should set error and show message on failed execute', async () => {
+  it('should set error and show toast on failed execute', async () => {
     const mockError = { response: { data: { message: 'Server error' } } };
     const mockFn = vi.fn().mockRejectedValue(mockError);
     const { result } = renderHook(() => useApi(mockFn));
@@ -57,7 +55,7 @@ describe('useApi', () => {
 
     expect(result.current.error).toBe('Server error');
     expect(result.current.loading).toBe(false);
-    expect(message.error).toHaveBeenCalledWith('Server error');
+    expect(toast.error).toHaveBeenCalledWith('Server error');
   });
 
   it('should use err.message as fallback error message', async () => {
