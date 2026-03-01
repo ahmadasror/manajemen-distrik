@@ -64,3 +64,9 @@ cors:
   allowed-methods: GET,POST,PUT,DELETE,OPTIONS
   allowed-headers: "*"
   allow-credentials: true
+
+wilayah:
+  validation:
+    # Active provider for the GET /api/v1/wilayah/validate endpoint.
+    # Options: wikipedia | nominatim
+    provider: wikipedia
