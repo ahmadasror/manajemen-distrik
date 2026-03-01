@@ -65,8 +65,10 @@ Then open http://localhost:8180 and:
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export PATH="$JAVA_HOME/bin:$PATH"
-cd backend && ./mvnw spring-boot:run
+cd backend && mvn spring-boot:run
 ```
+
+> Note: no `./mvnw` wrapper — use system `mvn` directly.
 
 Backend starts on **port 8090** (HTTPS). Flyway runs migrations automatically.
 
@@ -135,6 +137,7 @@ cd backend && ./mvnw test
 - Profile `test` uses H2 + custom Flyway migrations in `src/test/resources/db/test-migration/`
 - Integration tests: `@SpringBootTest` + `@ActiveProfiles("test")` + `@Transactional`
 - `KeycloakAuthIntegrationTest` uses `@MockBean JwtDecoder` — no live Keycloak required
+- **Run backend with `mvn test`** (no `./mvnw` — wrapper not present in this repo)
 
 ### Frontend tests
 
@@ -164,6 +167,36 @@ Ringkasan singkat:
 - ID dari CSV dipertahankan sebagai PK di sistem (jangan buat surrogate key baru)
 - Ada 87 baris anomali mismatch & 45 baris DistrictID 6-digit — import apa adanya, jangan di-block
 
+### Zipcode Resolver (`sample/resolve_zipcode.py`)
+
+Script standalone untuk mengisi zipcode kosong/00000 yang tidak ada di master data:
+- **Sumber**: Wikipedia Indonesia (infobox `kode_pos`) → fallback Nominatim (`calculated_postcode`)
+- **Rate limit**: Wikipedia 300ms, Nominatim 1100ms per request (fair-use)
+- **Resumable**: progress disimpan ke `sample/progress.json` setiap 10 baris
+- **Output**: `sample/zipcode_hasil.csv` — format sama + kolom `zipcode_hasil`, `zipcode_source`, `zipcode_similarity`
+- **Hit rate**: ~60% (desa tanpa halaman Wikipedia = NOT_FOUND)
+- Nominatim hampir tidak ada data desa kecil Indonesia — Wikipedia adalah sumber utama
+
+```bash
+cd sample
+python3 resolve_zipcode.py --limit 5   # test
+python3 resolve_zipcode.py             # full run (~5-6 jam untuk 11K baris)
+```
+
+---
+
+## Bulk Upload — Diff-based Apply
+
+`BulkUploadService.applyBulkUpload()` melakukan diff sebelum menyimpan:
+- **Skip** — record identik dengan DB → tidak disimpan, tidak diaudit
+- **Insert** — ID baru → insert
+- **Update name** → dihitung sebagai `inserted`
+- **Update zipCode only** (SubDistrict) → dihitung sebagai `updated`
+
+Summary JSONB setelah apply: `{ inserted, updated, skipped, provinces, states, districts, subDistricts }`
+
+`BulkWilayahEntityApplier.getCurrentState()` menyertakan semua field dari summary — otomatis muncul di pending action `afterState`.
+
 ---
 
 ## Key Files
@@ -178,3 +211,5 @@ Ringkasan singkat:
 | `frontend/src/auth/AuthContext.jsx` | Keycloak init + token management |
 | `frontend/src/api/axiosInstance.js` | Attaches Keycloak token; skips retry on `/auth/` endpoints |
 | `frontend/public/silent-check-sso.html` | Silent SSO check iframe |
+| `sample/resolve_zipcode.py` | Standalone zipcode resolver (Wikipedia + Nominatim) |
+| `sample/README.md` | Dokumentasi script resolver |
