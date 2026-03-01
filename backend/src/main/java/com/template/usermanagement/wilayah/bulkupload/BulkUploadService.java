@@ -155,10 +155,11 @@ public class BulkUploadService {
 
         List<BulkUploadRow> validRows = bulkUploadRowRepository.findByBulkUploadIdAndIsValidTrue(bulkUploadId);
 
-        Map<String, Province> provinces = new LinkedHashMap<>();
-        Map<String, State> states = new LinkedHashMap<>();
-        Map<String, District> districts = new LinkedHashMap<>();
-        List<SubDistrict> subDistricts = new ArrayList<>();
+        // Collect unique entities from CSV rows
+        Map<String, Province> csvProvinces = new LinkedHashMap<>();
+        Map<String, State> csvStates = new LinkedHashMap<>();
+        Map<String, District> csvDistricts = new LinkedHashMap<>();
+        Map<String, SubDistrict> csvSubDistricts = new LinkedHashMap<>();
 
         for (BulkUploadRow row : validRows) {
             Map<String, Object> d = row.getData();
@@ -172,24 +173,24 @@ public class BulkUploadService {
             String subDistrictName = str(d, "subDistrictName");
             String zipCode = str(d, "zipCode");
 
-            provinces.computeIfAbsent(provinceId, id -> Province.builder().provinceId(id).name(provinceName).build());
-            provinces.get(provinceId).setName(provinceName);
+            csvProvinces.computeIfAbsent(provinceId, id -> Province.builder().provinceId(id).name(provinceName).build());
+            csvProvinces.get(provinceId).setName(provinceName);
 
             if (!stateId.isEmpty()) {
-                Province prov = provinces.get(provinceId);
-                states.computeIfAbsent(stateId, id -> State.builder().stateId(id).name(stateName).province(prov).build());
-                states.get(stateId).setName(stateName);
+                Province prov = csvProvinces.get(provinceId);
+                csvStates.computeIfAbsent(stateId, id -> State.builder().stateId(id).name(stateName).province(prov).build());
+                csvStates.get(stateId).setName(stateName);
             }
 
-            if (!districtId.isEmpty() && states.containsKey(stateId)) {
-                State st = states.get(stateId);
-                districts.computeIfAbsent(districtId, id -> District.builder().districtId(id).name(districtName).state(st).build());
-                districts.get(districtId).setName(districtName);
+            if (!districtId.isEmpty() && csvStates.containsKey(stateId)) {
+                State st = csvStates.get(stateId);
+                csvDistricts.computeIfAbsent(districtId, id -> District.builder().districtId(id).name(districtName).state(st).build());
+                csvDistricts.get(districtId).setName(districtName);
             }
 
-            if (!subDistrictId.isEmpty() && districts.containsKey(districtId)) {
-                District dist = districts.get(districtId);
-                subDistricts.add(SubDistrict.builder()
+            if (!subDistrictId.isEmpty() && csvDistricts.containsKey(districtId)) {
+                District dist = csvDistricts.get(districtId);
+                csvSubDistricts.put(subDistrictId, SubDistrict.builder()
                         .subDistrictId(subDistrictId)
                         .name(subDistrictName)
                         .district(dist)
@@ -198,38 +199,126 @@ public class BulkUploadService {
             }
         }
 
-        // Batch upsert in hierarchy order
-        List<Province> provList = new ArrayList<>(provinces.values());
-        for (int i = 0; i < provList.size(); i += 500) {
-            provinceRepository.saveAll(provList.subList(i, Math.min(i + 500, provList.size())));
+        int insertedCount = 0, updatedCount = 0, skippedCount = 0;
+
+        // --- Provinces: diff ---
+        Map<String, Province> existingProvs = new LinkedHashMap<>();
+        provinceRepository.findAllById(csvProvinces.keySet()).forEach(p -> existingProvs.put(p.getProvinceId(), p));
+        List<Province> provsToSave = new ArrayList<>();
+        for (Map.Entry<String, Province> e : csvProvinces.entrySet()) {
+            Province existing = existingProvs.get(e.getKey());
+            Province csv = e.getValue();
+            if (existing == null) {
+                provsToSave.add(csv);
+                insertedCount++;
+            } else if (!Objects.equals(existing.getName(), csv.getName())) {
+                existing.setName(csv.getName());
+                provsToSave.add(existing);
+                insertedCount++;
+            } else {
+                skippedCount++;
+            }
         }
-        List<State> stateList = new ArrayList<>(states.values());
-        for (int i = 0; i < stateList.size(); i += 500) {
-            stateRepository.saveAll(stateList.subList(i, Math.min(i + 500, stateList.size())));
+        batchSave(provsToSave, provinceRepository);
+
+        // --- States: diff ---
+        Map<String, State> existingStates = new LinkedHashMap<>();
+        stateRepository.findAllById(csvStates.keySet()).forEach(s -> existingStates.put(s.getStateId(), s));
+        List<State> statesToSave = new ArrayList<>();
+        for (Map.Entry<String, State> e : csvStates.entrySet()) {
+            State existing = existingStates.get(e.getKey());
+            State csv = e.getValue();
+            if (existing == null) {
+                statesToSave.add(csv);
+                insertedCount++;
+            } else if (!Objects.equals(existing.getName(), csv.getName())) {
+                existing.setName(csv.getName());
+                existing.setProvince(csv.getProvince());
+                statesToSave.add(existing);
+                insertedCount++;
+            } else {
+                skippedCount++;
+            }
         }
-        List<District> distList = new ArrayList<>(districts.values());
-        for (int i = 0; i < distList.size(); i += 500) {
-            districtRepository.saveAll(distList.subList(i, Math.min(i + 500, distList.size())));
+        batchSave(statesToSave, stateRepository);
+
+        // --- Districts: diff ---
+        Map<String, District> existingDists = new LinkedHashMap<>();
+        districtRepository.findAllById(csvDistricts.keySet()).forEach(d -> existingDists.put(d.getDistrictId(), d));
+        List<District> distsToSave = new ArrayList<>();
+        for (Map.Entry<String, District> e : csvDistricts.entrySet()) {
+            District existing = existingDists.get(e.getKey());
+            District csv = e.getValue();
+            if (existing == null) {
+                distsToSave.add(csv);
+                insertedCount++;
+            } else if (!Objects.equals(existing.getName(), csv.getName())) {
+                existing.setName(csv.getName());
+                existing.setState(csv.getState());
+                distsToSave.add(existing);
+                insertedCount++;
+            } else {
+                skippedCount++;
+            }
         }
-        for (int i = 0; i < subDistricts.size(); i += 500) {
-            subDistrictRepository.saveAll(subDistricts.subList(i, Math.min(i + 500, subDistricts.size())));
+        batchSave(distsToSave, districtRepository);
+
+        // --- SubDistricts: diff (with zipCode) ---
+        Map<String, SubDistrict> existingSubs = new LinkedHashMap<>();
+        subDistrictRepository.findAllById(csvSubDistricts.keySet()).forEach(s -> existingSubs.put(s.getSubDistrictId(), s));
+        List<SubDistrict> subsToSave = new ArrayList<>();
+        for (Map.Entry<String, SubDistrict> e : csvSubDistricts.entrySet()) {
+            SubDistrict existing = existingSubs.get(e.getKey());
+            SubDistrict csv = e.getValue();
+            if (existing == null) {
+                subsToSave.add(csv);
+                insertedCount++;
+            } else {
+                boolean nameDiff = !Objects.equals(existing.getName(), csv.getName());
+                boolean zipDiff = !Objects.equals(existing.getZipCode(), csv.getZipCode());
+                if (nameDiff) {
+                    existing.setName(csv.getName());
+                    existing.setZipCode(csv.getZipCode());
+                    existing.setDistrict(csv.getDistrict());
+                    subsToSave.add(existing);
+                    insertedCount++;
+                } else if (zipDiff) {
+                    existing.setZipCode(csv.getZipCode());
+                    subsToSave.add(existing);
+                    updatedCount++;
+                } else {
+                    skippedCount++;
+                }
+            }
         }
+        batchSave(subsToSave, subDistrictRepository);
 
         bu.setStatus("APPLIED");
         bu.setSummary(Map.of(
-                "provinces", provList.size(),
-                "states", stateList.size(),
-                "districts", distList.size(),
-                "subDistricts", subDistricts.size()
+                "provinces", provsToSave.size(),
+                "states", statesToSave.size(),
+                "districts", distsToSave.size(),
+                "subDistricts", subsToSave.size(),
+                "inserted", insertedCount,
+                "updated", updatedCount,
+                "skipped", skippedCount
         ));
         bulkUploadRepository.save(bu);
 
         auditTrailService.recordAudit("BULK_UPLOAD_WILAYAH", bulkUploadId, "BULK_APPLY_WILAYAH",
-                null, Map.of("rowsApplied", validRows.size(), "fileName", bu.getFileName()),
+                null, Map.of("rowsApplied", validRows.size(), "fileName", bu.getFileName(),
+                        "inserted", insertedCount, "updated", updatedCount, "skipped", skippedCount),
                 performedBy, null);
 
-        log.info("[BulkUpload] Applied {} valid rows from upload {}", validRows.size(), bulkUploadId);
+        log.info("[BulkUpload] Applied {} valid rows from upload {} (inserted={}, updated={}, skipped={})",
+                validRows.size(), bulkUploadId, insertedCount, updatedCount, skippedCount);
         return validRows.size();
+    }
+
+    private <T> void batchSave(List<T> entities, org.springframework.data.jpa.repository.JpaRepository<T, ?> repo) {
+        for (int i = 0; i < entities.size(); i += 500) {
+            repo.saveAll(entities.subList(i, Math.min(i + 500, entities.size())));
+        }
     }
 
     @Transactional(readOnly = true)

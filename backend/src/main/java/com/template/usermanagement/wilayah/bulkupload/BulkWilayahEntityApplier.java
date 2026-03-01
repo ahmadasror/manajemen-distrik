@@ -5,6 +5,7 @@ import com.template.usermanagement.workflow.EntityApplier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -41,12 +42,15 @@ public class BulkWilayahEntityApplier implements EntityApplier {
     @Override
     public Map<String, Object> getCurrentState(Long id) {
         BulkUploadResponse resp = bulkUploadService.getById(id);
-        return Map.of(
-                "id", resp.getId(),
-                "fileName", resp.getFileName(),
-                "status", resp.getStatus(),
-                "rowCount", resp.getRowCount(),
-                "validCount", resp.getValidCount()
-        );
+        Map<String, Object> state = new HashMap<>();
+        state.put("id", resp.getId());
+        state.put("fileName", resp.getFileName());
+        state.put("status", resp.getStatus());
+        state.put("rowCount", resp.getRowCount());
+        state.put("validCount", resp.getValidCount());
+        if (resp.getSummary() != null) {
+            state.putAll(resp.getSummary());
+        }
+        return state;
     }
 }
