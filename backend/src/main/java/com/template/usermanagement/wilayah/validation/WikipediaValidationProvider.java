@@ -15,6 +15,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// LinkedHashMap preserves insertion order in fieldSources for consistent JSON output
+
 /**
  * Validation provider backed by the Indonesian Wikipedia (id.wikipedia.org).
  *
@@ -53,9 +55,15 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
             "\\|\\s*kode[_ ]pos\\s*=\\s*([^\\n]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_PROVINSI   = Pattern.compile(
             "\\|\\s*provinsi\\s*=\\s*([^\\n]+)", Pattern.CASE_INSENSITIVE);
-    // Kab/Kota: "dati ii", "dati_ii", "kabupaten", "kota", "kabupaten_kota"
+    // Kab/Kota — two naming conventions used across Indonesian Wikipedia articles:
+    //   1. {{Desa/Kelurahan}}: "| dati ii = ..." or "| dati_ii = ..."
+    //   2. {{kelurahan}} / {{Desa}}: "| nama dati2 = ..." (actual name) + "| dati2 = Kota/Kabupaten" (type)
+    // P_NAMA_DATI covers convention 2 (more specific — contains the real name).
+    // P_DATI covers convention 1 and fallback type fields.
+    private static final Pattern P_NAMA_DATI  = Pattern.compile(
+            "\\|\\s*nama[_ ]dati\\s*(?:2|ii)\\s*=\\s*([^\\n]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DATI       = Pattern.compile(
-            "\\|\\s*(?:dati[_ ]ii|kabupaten(?:[_ ]kota)?|kota)\\s*=\\s*([^\\n]+)",
+            "\\|\\s*(?:dati[_ ]ii|dati2|kabupaten(?:[_ ]kota)?|kota)\\s*=\\s*([^\\n]+)",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_KECAMATAN  = Pattern.compile(
             "\\|\\s*kecamatan\\s*=\\s*([^\\n]+)", Pattern.CASE_INSENSITIVE);
@@ -96,6 +104,7 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
                     .found(false).status("INVALID")
                     .localZipCode(zipCode)
                     .source("Wikipedia (id.wikipedia.org)")
+                    .fieldSources(Map.of())
                     .build();
         }
 
@@ -114,28 +123,56 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
                 ? infobox.get("nama")
                 : extractSimpleName(articleTitle);
 
-        // Recompute similarity against canonical infobox name (may be cleaner)
-        double similarity    = computeSimilarity(name, canonicalName);
         // Use the better of the two similarity scores
+        double similarity = computeSimilarity(name, canonicalName);
         if (titleSimilarity > similarity) {
             similarity    = titleSimilarity;
             canonicalName = extractSimpleName(articleTitle);
         }
         int similarityPct = (int) (similarity * 100);
 
-        String wikiZip    = trimOrNull(infobox.get("kode_pos"));
+        String wikiProvince  = trimOrNull(infobox.get("provinsi"));
+        String wikiCounty    = trimOrNull(infobox.get("dati_ii"));
+        String wikiKecamatan = trimOrNull(infobox.get("kecamatan"));
+        Double lat           = parseDouble(infobox.get("lat"));
+        Double lon           = parseDouble(infobox.get("lon"));
+
+        // ── Zip code resolution: Wikipedia infobox first, Nominatim fallback ──
+        Map<String, String> fieldSources = new LinkedHashMap<>();
+        fieldSources.put("name", "Wikipedia");
+        if (wikiProvince  != null) fieldSources.put("province",    "Wikipedia");
+        if (wikiCounty    != null) fieldSources.put("county",      "Wikipedia");
+        if (wikiKecamatan != null) fieldSources.put("district",    "Wikipedia");
+        if (lat != null || lon != null) fieldSources.put("coordinates", "Wikipedia");
+
+        String resolvedZip   = trimOrNull(infobox.get("kode_pos"));
+        String zipSourceLabel;
+
+        if (resolvedZip != null) {
+            zipSourceLabel = "Wikipedia";
+            log.debug("[Wikipedia] zip from infobox: {}", resolvedZip);
+        } else {
+            // Fallback: search Nominatim for the same query and get calculated_postcode
+            log.debug("[Wikipedia] no zip in infobox — falling back to Nominatim for postcode");
+            String nominatimQuery = buildNominatimQuery(name, districtName, stateName, provinceName);
+            List<Map<String, Object>> nomResults = searchNominatim(restTemplate, nominatimQuery, 3);
+            if (!nomResults.isEmpty()) {
+                Map<String, Object> nomBest = nominatimBestMatch(name, nomResults);
+                String placeId = String.valueOf(nomBest.get("place_id"));
+                resolvedZip = getNominatimPostcode(restTemplate, placeId, "Wikipedia→Nominatim");
+                zipSourceLabel = resolvedZip != null ? "Nominatim (fallback)" : null;
+                log.debug("[Wikipedia] Nominatim fallback zip: {}", resolvedZip);
+            } else {
+                zipSourceLabel = null;
+            }
+        }
+
+        if (zipSourceLabel != null) fieldSources.put("zipCode", zipSourceLabel);
+
         boolean hasLocalZip = zipCode != null && !zipCode.isBlank();
-        boolean zipMatch  = hasLocalZip && wikiZip != null && zipCode.trim().equals(wikiZip);
-        boolean nameValid = similarity >= SIMILARITY_THRESHOLD;
+        boolean zipMatch    = hasLocalZip && resolvedZip != null && zipCode.trim().equals(resolvedZip);
+        boolean nameValid   = similarity >= SIMILARITY_THRESHOLD;
 
-        String wikiProvince   = trimOrNull(infobox.get("provinsi"));
-        String wikiCounty     = trimOrNull(infobox.get("dati_ii"));
-        String wikiKecamatan  = trimOrNull(infobox.get("kecamatan"));
-
-        Double lat = parseDouble(infobox.get("lat"));
-        Double lon = parseDouble(infobox.get("lon"));
-
-        // Build a human-readable display name from infobox hierarchy
         String displayName = buildDisplayName(canonicalName, wikiKecamatan, wikiCounty, wikiProvince, articleTitle);
 
         return ValidationResult.builder()
@@ -148,11 +185,12 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
                 .nominatimType(detectType(wikitext))
                 .nominatimProvince(wikiProvince)
                 .nominatimCounty(wikiCounty)
-                .nominatimZipCode(wikiZip)
+                .nominatimZipCode(resolvedZip)
                 .localZipCode(zipCode)
                 .lat(lat)
                 .lon(lon)
                 .source("Wikipedia (id.wikipedia.org)")
+                .fieldSources(fieldSources)
                 .build();
     }
 
@@ -249,7 +287,10 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
         extractField(P_NAMA,      wikitext).ifPresent(v -> result.put("nama",      clean(v)));
         extractField(P_KODE_POS,  wikitext).ifPresent(v -> result.put("kode_pos",  cleanZip(v)));
         extractField(P_PROVINSI,  wikitext).ifPresent(v -> result.put("provinsi",  clean(v)));
-        extractField(P_DATI,      wikitext).ifPresent(v -> result.put("dati_ii",   clean(v)));
+        // "nama dati2" (e.g. {{kelurahan}} template) takes priority over generic "dati ii"
+        extractField(P_NAMA_DATI, wikitext)
+                .or(() -> extractField(P_DATI, wikitext))
+                .ifPresent(v -> result.put("dati_ii", clean(v)));
         extractField(P_KECAMATAN, wikitext).ifPresent(v -> result.put("kecamatan", clean(v)));
         extractField(P_LAT,       wikitext).ifPresent(v -> result.put("lat",       v.trim()));
         extractField(P_LON,       wikitext).ifPresent(v -> result.put("lon",       v.trim()));
@@ -306,6 +347,15 @@ public class WikipediaValidationProvider extends AbstractValidationProvider {
         if (district != null && !district.isBlank()) sb.append(" ").append(district);
         if (state    != null && !state.isBlank())    sb.append(" ").append(state);
         if (province != null && !province.isBlank()) sb.append(" ").append(province);
+        return sb.toString();
+    }
+
+    private String buildNominatimQuery(String name, String district, String state, String province) {
+        StringBuilder sb = new StringBuilder(name);
+        if (district != null && !district.isBlank()) sb.append(", ").append(district);
+        if (state    != null && !state.isBlank())    sb.append(", ").append(state);
+        if (province != null && !province.isBlank()) sb.append(", ").append(province);
+        sb.append(", Indonesia");
         return sb.toString();
     }
 

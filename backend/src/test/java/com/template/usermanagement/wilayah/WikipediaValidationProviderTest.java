@@ -118,6 +118,32 @@ class WikipediaValidationProviderTest {
 
             assertThat(result.get("dati_ii")).isEqualTo("Bogor");
         }
+
+        @Test
+        void handlesNamaDati2VariantFromKelurahanTemplate() {
+            // {{kelurahan}} template uses "dati2" (type) + "nama dati2" (actual name)
+            // Real article: Aek Tampang, Padangsidimpuan Selatan, Padangsidimpuan
+            String wikitext = """
+                    {{kelurahan
+                    |nama = Aek Tampang
+                    |provinsi = Sumatera Utara
+                    |dati2 = Kota
+                    |nama dati2 = Padangsidimpuan\s
+                    |kecamatan = Padangsidimpuan Selatan
+                    |kelurahan = kelurahan
+                    }}
+                    """;
+
+            Map<String, String> result = provider.parseInfobox(wikitext);
+
+            assertThat(result.get("nama")).isEqualTo("Aek Tampang");
+            assertThat(result.get("provinsi")).isEqualTo("Sumatera Utara");
+            // "nama dati2" should be preferred over "dati2"
+            assertThat(result.get("dati_ii")).isEqualTo("Padangsidimpuan");
+            assertThat(result.get("kecamatan")).isEqualTo("Padangsidimpuan Selatan");
+            // no kode pos field → absent
+            assertThat(result).doesNotContainKey("kode_pos");
+        }
     }
 
     @Nested
