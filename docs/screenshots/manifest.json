@@ -1,0 +1,36 @@
+{
+  "admin": {
+    "dashboard": {
+      "overview": "screenshots/dashboard/01-overview.png"
+    },
+    "users": {
+      "user_list": "screenshots/users/01-user-list.png",
+      "user_form": "screenshots/users/02-user-form.png",
+      "user_detail": "screenshots/users/03-user-detail.png"
+    },
+    "pending": {
+      "list": "screenshots/pending/01-pending-list.png"
+    },
+    "audit": {
+      "list": "screenshots/audit/01-audit-list.png"
+    },
+    "wilayah": {
+      "wilayah_main": "screenshots/wilayah/01-wilayah-main.png"
+    },
+    "roles": {
+      "role_list": "screenshots/roles/01-role-list.png"
+    },
+    "settings": {
+      "settings": "screenshots/settings/01-settings.png"
+    }
+  },
+  "viewer": {
+    "dashboard": "screenshots/viewer/01-dashboard.png",
+    "wilayah": "screenshots/viewer/02-wilayah.png"
+  },
+  "login": {
+    "login_page": "screenshots/login/01-login-page.png",
+    "keycloak_login": "screenshots/login/02-keycloak-login.png",
+    "dashboard_admin": "screenshots/login/03-dashboard-admin.png"
+  }
+}
